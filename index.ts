@@ -1,42 +1,37 @@
 #!/usr/bin/env bun
 
-import chalk from "chalk";
+import { Command } from "commander";
 import { logo } from "./src/logo";
-import { printUsage } from "./src/usage";
 import { start } from "./src/commands/start";
 import { init } from "./src/commands/init";
 import { run } from "./src/commands/run";
 
 async function main() {
-  const command = process.argv[2];
-
   logo();
 
-  if (!command) {
-    printUsage();
-    process.exit(0);
-  }
+  const program = new Command();
 
-  switch (command) {
-    case "start":
-      await start();
-      break;
-    case "init":
-      await init();
-      break;
-    case "run":
-      await run();
-      break;
-    case "--help":
-    case "-h":
-      printUsage();
-      break;
-    default:
-      console.log(chalk.red(`✗ Unknown command: ${command}`));
-      console.log();
-      printUsage();
-      process.exit(1);
-  }
+  program
+    .name("barkcode")
+    .description("CLI for Barkcode")
+    .version("1.0.0");
+
+  program
+    .command("start")
+    .description("Launch Rhino 8")
+    .action(start);
+
+  program
+    .command("init")
+    .description("Initialize a new project")
+    .action(init);
+
+  program
+    .command("run")
+    .description("Run a script")
+    .action(run);
+
+  program.parse(process.argv);
 }
 
 main();
