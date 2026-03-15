@@ -1,0 +1,16 @@
+import chalk from "chalk";
+import { displayInfo, displayBold } from "./lib/logger";
+
+export function logo() {
+  console.log(
+    chalk.white(`
+    ▗▄▄▖  ▗▄▖ ▗▄▄▖ ▗▖ ▗▖ ▗▄▄▖ ▗▄▖ ▗▄▄▄ ▗▄▄▄▖
+    ▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▐▌▗▞▘▐▌   ▐▌ ▐▌▐▌  █▐▌
+    ▐▛▀▚▖▐▛▀▜▌▐▛▀▚▖▐▛▚▖ ▐▌   ▐▌ ▐▌▐▌  █▐▛▀▀▘
+    ▐▙▄▞▘▐▌ ▐▌▐▌ ▐▌▐▌ ▐▌▝▚▄▄▖▝▚▄▞▘▐▙▄▄▀▐▙▄▄▖
+  `),
+  );
+  displayInfo("    ════════════════════════════════════════");
+  displayBold("      BarkCode - Rhino Code Runner");
+  displayInfo("    ════════════════════════════════════════\n");
+}
