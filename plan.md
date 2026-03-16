@@ -622,14 +622,14 @@ barkcode/
 ---
 
 ## 14. Dependencies
-
+version here is reference only, use the one already in `package.json`
 ```json
 {
   "dependencies": {
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
     "glob": "^10.3.10",
-    "prompts": "^2.4.2",
+    "@inquirer/prompts": "^8.3.2",
     "zod": "^3.24.1"
   }
 }
