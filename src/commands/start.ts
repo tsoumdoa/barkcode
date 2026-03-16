@@ -5,6 +5,13 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function setupExitHandler() {
+  process.on("SIGINT", () => {
+    console.log(chalk.yellow("\n⚠ Interrupted by user. Exiting..."));
+    process.exit(0);
+  });
+}
+
 async function checkRhinocode(): Promise<boolean> {
   const proc = Bun.spawn(["rhinocode", "--version"], {
     stdout: "ignore",
@@ -101,6 +108,8 @@ async function waitForRhinoInstances(expectedCount: number): Promise<string[]> {
 }
 
 export async function start(spawnCount: number = 1) {
+  setupExitHandler();
+
   displayMessage("Checking for rhinocode...");
   await checkRhinocodeOrExit();
   displayMessage("rhinocode found.");
@@ -111,6 +120,7 @@ export async function start(spawnCount: number = 1) {
   runner.spawnRhino(spawnCount);
 
   displayMessage("Rhino started. Checking if running...");
+  console.log(chalk.gray("  Press Ctrl+C to exit\n"));
 
   const processes = await waitForRhinoInstances(spawnCount);
   displayMessage("All Rhino instances started!");
