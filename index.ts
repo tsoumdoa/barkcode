@@ -19,7 +19,8 @@ async function main() {
   program
     .command("start")
     .description("Launch Rhino 8")
-    .action(start);
+    .option("-s, --spawn <count>", "Number of Rhino instances to start", "1")
+    .action((options) => start(parseInt(options.spawn)));
 
   program
     .command("init")
