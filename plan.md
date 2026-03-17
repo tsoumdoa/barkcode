@@ -746,3 +746,196 @@ If you want, I can also turn this into:
 2. `src/types.ts`
 3. `src/schema.ts` with Zod
 4. `src/lib/config.ts` with the upward-search behavior
+
+---
+
+## 19. UX Changes (Beta v1 Update)
+
+### 19.1 Rename `bark start` → `bark run`
+
+The `bark start` command is renamed to `bark run`. This is now the primary command for starting an interactive session with Rhino.
+
+- `bark run` provides an interactive menu for command selection
+- Accepts an optional command name/id argument to execute immediately on launch
+- Maintains persistent Rhino session between commands
+
+### 19.2 New `bark run` CLI
+
+```bash
+bark run                          # Show interactive menu
+bark run <command-id>             # Launch Rhino and run command immediately
+bark run convertToStep            # Run the command with id "convertToStep"
+bark run --config ./barkcode.json # Use specific config
+bark run --dry-run                # Preview without executing
+```
+
+### 19.3 New `id` Field in barkcode.json
+
+Add `id` field to the `BarkCommand` schema:
+
+```ts
+type BarkCommand = {
+  id?: string;           // Short identifier for CLI selection (e.g., "convertToStep")
+  name: string;          // Human-readable command name
+  description?: string;
+  // ... rest of existing fields
+};
+```
+
+#### Example barkcode.json with id field
+
+```json
+{
+  "version": "1.0",
+  "commands": [
+    {
+      "id": "convertToStep",
+      "name": "Convert 3DM to STEP",
+      "description": "Convert all 3DM files to STEP format",
+      "rhCommand": "_-Export",
+      "inputMode": "batch",
+      "inputPattern": "*.3dm",
+      "inputFolder": "./models",
+      "outputFolder": "./converted/step",
+      "outputFormat": "step"
+    },
+    {
+      "id": "exportStl",
+      "name": "Batch STL Export",
+      "description": "Export 3DM files to STL for 3D printing",
+      "rhCommand": "_-Export",
+      "inputMode": "batch",
+      "inputPattern": "*.3dm",
+      "outputFolder": "./exports/stl",
+      "outputFormat": "stl"
+    },
+    {
+      "id": "runAnalysis",
+      "name": "Run Analysis Script",
+      "description": "Run custom Python analysis on selected file",
+      "rhCommand": "_RunPythonScript",
+      "scriptPath": "./scripts/AnalyzeGeometry.py",
+      "inputMode": "single"
+    }
+  ]
+}
+```
+
+### 19.4 Remove Custom Rhino Command
+
+The "Custom Rhino command" option is removed from the interactive menu. Users should:
+- Define custom commands in barkcode.json with an id
+- Use `bark run <command-id>` to execute them
+
+#### Updated Interactive Menu Example
+
+```text
+Select a command to run:
+1. Convert 3DM to STEP (convertToStep)
+2. Batch STL Export (exportStl)
+3. Run Analysis Script (runAnalysis)
+4. Exit
+```
+
+---
+
+## 20. Beta v2 Roadmap - Command Builder
+
+### 20.1 Overview
+
+Beta v2 introduces an interactive command builder that allows users to add, edit, and delete commands in barkcode.json without manually editing the JSON file.
+
+### 20.2 New Commands
+
+#### `bark add` / `bark command add`
+
+Interactive wizard to add a new command:
+1. Prompt for command name
+2. Prompt for optional id (short identifier)
+3. Prompt for optional description
+4. Prompt for Rhino command (e.g., "_-Export")
+5. Prompt for input mode (single/batch)
+6. Prompt for input pattern (e.g., "*.3dm")
+7. Prompt for input folder
+8. Prompt for output folder
+9. Prompt for output format (optional)
+10. Add to barkcode.json and confirm
+
+```bash
+bark add                          # Interactive wizard
+bark add --template stl           # Pre-fill with STL export template
+bark add --template step          # Pre-fill with STEP export template
+```
+
+#### `bark remove` / `bark command remove`
+
+Interactive deletion with confirmation:
+1. Show list of commands with ids
+2. Prompt to select command to delete
+3. Confirm deletion
+4. Remove from barkcode.json
+
+```bash
+bark remove                       # Interactive removal
+bark remove convertToStep        # Remove by id (with confirmation)
+```
+
+#### `bark list` / `bark command list`
+
+List all commands in barkcode.json:
+```bash
+bark list                         # Show all commands
+bark list --json                  # Output as JSON
+```
+
+#### `bark edit` / `bark command edit`
+
+Edit an existing command:
+```bash
+bark edit convertToStep          # Edit command by id
+```
+
+### 20.3 Schema Update for Beta v2
+
+```ts
+type BarkcodeConfig = {
+  version: "2.0";  // Bump version for v2 features
+  commands: BarkCommand[];
+};
+
+type BarkCommand = {
+  id: string;                     // Required in v2 for easier CLI usage
+  name: string;
+  description?: string;
+
+  // Rhino execution
+  rhCommand: string;
+  scriptPath?: string;
+  waitForCompletion?: boolean;
+  timeout?: number;
+
+  // Input
+  inputMode?: "single" | "batch";
+  inputPattern?: string;
+  inputFolder?: string;
+  recursive?: boolean;
+  requiredFiles?: string[];
+
+  // Output
+  outputFolder?: string;
+  outputFormat?: string;
+  preserveStructure?: boolean;
+  onConflict?: "error" | "skip" | "overwrite" | "rename";
+
+  // Naming
+  rename?: RenameOptions;
+};
+```
+
+### 20.4 Implementation Notes
+
+- Use `@inquirer/prompts` for interactive input
+- Validate id uniqueness before adding
+- Auto-generate id from name if not provided (e.g., "Convert 3DM to STEP" → "convert3dmToStep")
+- Support YAML config in addition to JSON for v2 (optional)
+- Add `--yes` / `-y` flags for non-interactive批量 operations
