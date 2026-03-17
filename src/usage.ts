@@ -1,11 +1,12 @@
 import chalk from "chalk";
+import { displayBold } from "./lib/logger.js";
 
 export function printUsage() {
   console.log(
     chalk.white("Usage:") + chalk.gray(" barkcode ") + chalk.cyan("<command>"),
   );
   console.log();
-  console.log(chalk.white("Commands:"));
+  displayBold("Commands:");
   console.log(
     chalk.gray("  ") + chalk.cyan("run       ") + chalk.gray("Launch Rhino 8 with interactive menu"),
   );

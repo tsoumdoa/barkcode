@@ -6,6 +6,7 @@ import type { BatchOptions, BatchSummary, FileMapping, BarkCommand } from "../ty
 import { renameFile, sanitizeFilename } from "./rename.js";
 import { executeOnFile } from "./rhinocode.js";
 import type { RhinoInstance } from "../types.js";
+import { displayConflict, displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed } from "./logger.js";
 
 export async function collectFiles(
   inputFolder: string,
@@ -108,7 +109,8 @@ export async function processBatch(
   command: BarkCommand,
   inputFiles: string[],
   projectRoot: string,
-  instance: RhinoInstance,
+  // instances: RhinoInstance,
+  instances: string[],
   options: {
     outputFolder?: string;
     dryRun?: boolean;
@@ -164,10 +166,10 @@ export async function processBatch(
   if (hasConflicts && onConflict === "error") {
     const conflicts = resolved.filter((m) => m.status === "conflict");
     for (const conflict of conflicts) {
-      console.log(chalk.red(`! conflict: ${conflict.inputPath} -> ${conflict.outputPath}`));
+      displayConflict(`${conflict.inputPath} -> ${conflict.outputPath}`);
     }
-    console.log(chalk.yellow(`\nAction on conflict: ${onConflict}`));
-    console.log(chalk.yellow("Dry run only. No files were processed.\n"));
+    displayWarning(`\nAction on conflict: ${onConflict}`);
+    displayWarning("Dry run only. No files were processed.\n");
 
     return {
       mappings: resolved,
@@ -176,15 +178,15 @@ export async function processBatch(
   }
 
   if (options.dryRun) {
-    console.log(chalk.gray(`\nDry run. Would process ${resolved.length} files:\n`));
+    displayInfo(`\nDry run. Would process ${resolved.length} files:\n`);
     for (const mapping of resolved.slice(0, 10)) {
       console.log(`  ${mapping.inputPath}`);
-      console.log(chalk.gray(`    -> ${mapping.outputPath}`));
+      displayInfo(`    -> ${mapping.outputPath}`);
     }
     if (resolved.length > 10) {
-      console.log(chalk.gray(`  ... and ${resolved.length - 10} more`));
+      displayInfo(`  ... and ${resolved.length - 10} more`);
     }
-    console.log(chalk.yellow("\nDry run only. No files were processed.\n"));
+    displayWarning("\nDry run only. No files were processed.\n");
 
     return {
       mappings: resolved,
@@ -248,13 +250,13 @@ export async function processBatch(
 }
 
 export function printBatchSummary(summary: BatchSummary): void {
-  console.log(chalk.white.bold("\n=== Batch Summary ==="));
-  console.log(chalk.white(`Total:    ${summary.total}`));
-  console.log(chalk.green(`Succeeded: ${summary.succeeded}`));
+  displayBold("\n=== Batch Summary ===");
+  displayTotal(`Total:    ${summary.total}`);
+  displaySucceeded(`Succeeded: ${summary.succeeded}`);
   if (summary.failed > 0) {
-    console.log(chalk.red(`Failed:   ${summary.failed}`));
+    displayFailed(`Failed:   ${summary.failed}`);
   }
   if (summary.skipped > 0) {
-    console.log(chalk.yellow(`Skipped:  ${summary.skipped}`));
+    displayWarning(`Skipped:  ${summary.skipped}`);
   }
 }

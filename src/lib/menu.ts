@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { select } from "@inquirer/prompts";
 import type { BarkcodeConfig, BarkCommand, RhinoInstance } from "../types.js";
 import { processBatch, printBatchSummary, collectFiles } from "./batch.js";
+import { displayBold, displayInfo, displayWarning } from "./logger.js";
 
 type MenuChoice = { type: "command"; index: number } | { type: "exit" };
 
@@ -44,22 +45,22 @@ async function runConfiguredCommand(
   instance: RhinoInstance,
   projectRoot: string,
 ): Promise<void> {
-  console.log(chalk.white.bold(`\nRunning: ${command.name}`));
+  displayBold(`\nRunning: ${command.name}`);
 
   const inputPattern = command.inputPattern || "*.3dm";
   const inputFolder = command.inputFolder || ".";
   const isRecursive = command.recursive ?? false;
 
-  console.log(chalk.gray(`  Input: ${inputFolder}/${inputPattern}`));
+  displayInfo(`  Input: ${inputFolder}/${inputPattern}`);
 
   const files = await collectFiles(inputFolder, inputPattern, isRecursive, projectRoot);
 
   if (files.length === 0) {
-    console.log(chalk.yellow(`  No files found matching ${inputPattern}`));
+    displayWarning(`  No files found matching ${inputPattern}`);
     return;
   }
 
-  console.log(chalk.gray(`  Found ${files.length} file(s)`));
+  displayInfo(`  Found ${files.length} file(s)`);
 
   const { summary } = await processBatch(command, files, projectRoot, instance, {
     outputFolder: command.outputFolder,

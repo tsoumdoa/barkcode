@@ -3,6 +3,7 @@ import { writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { resolve } from "path";
 import { confirm } from "@inquirer/prompts";
+import { displayMessage, displayWarning, displayInfo } from "../lib/logger.js";
 
 const DEFAULT_CONFIG = {
   version: "1.0",
@@ -55,13 +56,13 @@ export async function init(options: { path?: string; force?: boolean } = {}) {
     });
 
     if (!overwrite) {
-      console.log(chalk.yellow("Init cancelled."));
+      displayWarning("Init cancelled.");
       return;
     }
   }
 
   await writeFile(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n", "utf-8");
 
-  console.log(chalk.green("✓ ") + chalk.white(`Created ${configPath}`));
-  console.log(chalk.gray("  Edit barkcode.json to add your commands."));
+  displayMessage(`Created ${configPath}`);
+  displayInfo("  Edit barkcode.json to add your commands.");
 }

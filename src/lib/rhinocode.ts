@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
-import chalk from "chalk";
 import type { RhinoInstance, CommandResult, ExecuteOptions } from "../types.js";
 import { DEFAULT_TIMEOUT } from "../constants.js";
+import { displayInfo } from "./logger.js";
 
 export async function connect(): Promise<RhinoInstance> {
   const proc = spawn("rhinocode", ["list"], {
@@ -101,7 +101,7 @@ export async function executeOnFile(
 }
 
 export async function disconnect(instance: RhinoInstance): Promise<void> {
-  console.log(chalk.gray(`  Disconnected from Rhino ${instance.id}`));
+  displayInfo(`  Disconnected from Rhino ${instance.id}`);
 }
 
 export async function isRhinocodeAvailable(): Promise<boolean> {
