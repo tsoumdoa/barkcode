@@ -18,19 +18,39 @@ async function main() {
 
   program
     .command("start")
-    .description("Launch Rhino 8")
+    .description("Launch Rhino 8 with interactive menu")
     .option("-s, --spawn <count>", "Number of Rhino instances to start", "1")
-    .action((options) => start(parseInt(options.spawn)));
+    .option("-c, --config <path>", "Config file path")
+    .option("--command <name>", "Run a specific command non-interactively")
+    .action((options) => start({
+      spawn: parseInt(options.spawn),
+      config: options.config,
+      command: options.command,
+    }));
 
   program
     .command("init")
     .description("Initialize a new project")
-    .action(init);
+    .option("-p, --path <path>", "Target directory")
+    .option("-f, --force", "Overwrite existing config")
+    .action((options) => init({ path: options.path, force: options.force }));
 
   program
-    .command("run")
-    .description("Run a script")
-    .action(run);
+    .command("run [command]")
+    .description("Run a configured command")
+    .option("-c, --config <path>", "Config file path")
+    .option("-i, --input <path>", "Input folder")
+    .option("-o, --output <path>", "Output folder")
+    .option("-r, --recursive", "Process recursively")
+    .option("-d, --dry-run", "Preview without executing")
+    .action((cmd, options) => run({
+      command: cmd,
+      config: options.config,
+      input: options.input,
+      output: options.output,
+      recursive: options.recursive,
+      dryRun: options.dryRun,
+    }));
 
   program.parse(process.argv);
 }

@@ -1,5 +1,9 @@
 import chalk from "chalk";
-import { RHINO_PATH } from "../constants";
+import { RHINO_PATH, isMac } from "../constants";
+import { connect, isRhinocodeAvailable, listRhinoInstances } from "../lib/rhinocode.js";
+import { loadConfig } from "../lib/config.js";
+import { showCommandMenu } from "../lib/menu.js";
+import { existsSync } from "fs";
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -7,31 +11,13 @@ function delay(ms: number) {
 
 function setupExitHandler() {
   process.on("SIGINT", () => {
-    console.log(chalk.yellow("\n⚠ Interrupted by user. Exiting..."));
+    console.log(chalk.yellow("\n\nExiting Barkcode. Rhino will remain open."));
     process.exit(0);
   });
 }
 
-async function checkRhinocode(): Promise<boolean> {
-  const proc = Bun.spawn(["rhinocode", "--version"], {
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-  const exitCode = await proc.exited;
-  return exitCode === 0;
-}
-
-async function isRhinoRunning(): Promise<{ running: boolean; output: string }> {
-  const proc = Bun.spawn(["rhinocode", "list"], {
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  const output = await new Response(proc.stdout).text();
-  return { running: output.includes("rhinocode_remotepipe"), output };
-}
-
 async function checkRhinocodeOrExit() {
-  const hasRhinocode = await checkRhinocode();
+  const hasRhinocode = await isRhinocodeAvailable();
   if (!hasRhinocode) {
     console.log(chalk.red("✗ rhinocode not recognized!"));
     console.log(chalk.gray("  Ensure rhinocode is in your system PATH."));
@@ -39,67 +25,41 @@ async function checkRhinocodeOrExit() {
   }
 }
 
-function displayMessage(message: string) {
-  console.log(chalk.green("✓ ") + chalk.white(message));
+async function checkRhinoOrExit() {
+  if (!existsSync(RHINO_PATH)) {
+    console.log(chalk.red("✗ Rhino not found!"));
+    console.log(chalk.gray("  Expected at: ") + chalk.white(RHINO_PATH));
+    console.log();
+    console.log(chalk.yellow("Please check your Rhino 8 installation."));
+    process.exit(1);
+  }
 }
 
-function createRhinoRunner(rhinoPath: string) {
-  return {
-    async checkRhinoOrExit() {
-      const file = Bun.file(rhinoPath);
-      const exists = await file.exists();
+function spawnRhino(count: number) {
+  for (let i = 0; i < count; i++) {
+    const args = isMac
+      ? ["-a", "--args", "_StartScriptServer"]
+      : ["/nosplash", '/runscript="_StartScriptServer"'];
 
-      if (!exists) {
-        console.log(chalk.red("✗ Rhino not found!"));
-        console.log(chalk.gray("  Expected at: ") + chalk.white(rhinoPath));
-        console.log();
-        console.log(chalk.yellow("Please check your Rhino 8 installation."));
-        process.exit(1);
-      }
-    },
-    spawnRhino(spawnCount: number) {
-      for (let i = 0; i < spawnCount; i++) {
-        Bun.spawn(
-          [RHINO_PATH, "/nosplash", '/runscript="_StartScriptServer"'],
-          {
-            stdout: "ignore",
-            stderr: "ignore",
-            stdin: "ignore",
-            windowsVerbatimArguments: true,
-          },
-        );
-      }
-    },
-  };
+    Bun.spawn([RHINO_PATH, ...args], {
+      stdout: "ignore",
+      stderr: "ignore",
+      stdin: "ignore",
+      windowsVerbatimArguments: true,
+    });
+  }
 }
 
 async function getRunningProcesses(): Promise<string[]> {
-  const { output } = await isRhinoRunning();
-  if (!output.trim()) return [];
-
-  const lines = output.trim().split("\n").slice(1);
-  return lines
-    .map((line) => {
-      const parts = line.trim().split(/\s+/);
-      if (parts.length >= 2) {
-        return parts[1];
-      }
-      return null;
-    })
-    .filter((p): p is string => p !== null);
+  return listRhinoInstances();
 }
 
 async function waitForRhinoInstances(expectedCount: number): Promise<string[]> {
   while (true) {
     const processes = await getRunningProcesses();
     const currentCount = processes.length;
-    console.log(
-      chalk.gray(
-        `  Current state: ${currentCount}/${expectedCount} Rhino processes running`,
-      ),
-    );
 
-    if (currentCount === expectedCount) {
+    if (currentCount >= expectedCount) {
       return processes;
     }
 
@@ -107,22 +67,95 @@ async function waitForRhinoInstances(expectedCount: number): Promise<string[]> {
   }
 }
 
-export async function start(spawnCount: number = 1) {
+export async function start(options: { spawn?: number; config?: string; command?: string } = {}) {
+  const { spawn: spawnCount = 1, config: configPath, command: commandName } = options;
+
   setupExitHandler();
 
-  displayMessage("Checking for rhinocode...");
+  console.log(chalk.gray("Checking for rhinocode..."));
   await checkRhinocodeOrExit();
-  displayMessage("rhinocode found.");
+  console.log(chalk.green("✓ ") + chalk.gray("rhinocode found."));
 
-  const runner = createRhinoRunner(RHINO_PATH);
-  await runner.checkRhinoOrExit();
-  displayMessage("Launching Rhino 8...");
-  runner.spawnRhino(spawnCount);
+  await checkRhinoOrExit();
 
-  displayMessage("Rhino started. Checking if running...");
-  console.log(chalk.gray("  Press Ctrl+C to exit\n"));
+  const instances = await getRunningProcesses();
 
-  const processes = await waitForRhinoInstances(spawnCount);
-  displayMessage("All Rhino instances started!");
-  processes.forEach((p) => console.log(chalk.gray(`  RhinoId: ${p}`)));
+  if (instances.length === 0) {
+    console.log(chalk.gray("\nLaunching Rhino 8..."));
+    spawnRhino(spawnCount);
+
+    const processes = await waitForRhinoInstances(spawnCount);
+    console.log(chalk.green("✓ ") + chalk.gray(`Rhino started (${processes.length} instance(s))\n`));
+  } else {
+    console.log(chalk.green("✓ ") + chalk.gray(`Found ${instances.length} running Rhino instance(s)\n`));
+  }
+
+  let loadedConfig;
+  try {
+    loadedConfig = await loadConfig({ configPath });
+  } catch (e) {
+    const err = e as Error;
+    console.log(chalk.red(`✗ ${err.message}`));
+    console.log(chalk.gray("\nRun `bark init` to create a barkcode.json file."));
+    process.exit(1);
+  }
+
+  const { config, projectRoot } = loadedConfig;
+
+  console.log(chalk.green("✓ ") + chalk.gray(`Config loaded from ${loadedConfig.configPath}`));
+  console.log(chalk.gray(`  Project root: ${projectRoot}\n`));
+
+  let instance;
+  try {
+    instance = await connect();
+  } catch (e) {
+    const err = e as Error;
+    console.log(chalk.red(`✗ ${err.message}`));
+    console.log(chalk.yellow("\nStart Rhino first if it's not running."));
+    process.exit(1);
+  }
+
+  console.log(chalk.green("✓ ") + chalk.gray(`Connected to Rhino ${instance.id}`));
+  console.log(chalk.gray("\nPress Ctrl+C to exit\n"));
+
+  if (commandName) {
+    const { getCommand } = await import("../lib/config.js");
+    const command = getCommand(config, commandName);
+
+    const { processBatch, printBatchSummary, collectFiles } = await import("../lib/batch.js");
+
+    console.log(chalk.white.bold(`Running: ${command.name}`));
+
+    const inputPattern = command.inputPattern || "*.3dm";
+    const inputFolder = command.inputFolder || ".";
+    const isRecursive = command.recursive ?? false;
+
+    const files = await collectFiles(inputFolder, inputPattern, isRecursive, projectRoot);
+
+    if (files.length === 0) {
+      console.log(chalk.yellow(`No files found matching ${inputPattern}`));
+      process.exit(1);
+    }
+
+    console.log(chalk.gray(`Found ${files.length} file(s)\n`));
+
+    const { summary } = await processBatch(command, files, projectRoot, instance, {
+      outputFolder: command.outputFolder,
+      dryRun: false,
+      onConflict: command.onConflict || "error",
+    });
+
+    printBatchSummary(summary);
+    process.exit(summary.failed > 0 ? 1 : 0);
+  }
+
+  while (true) {
+    const shouldContinue = await showCommandMenu(config, instance, projectRoot);
+    if (!shouldContinue) {
+      break;
+    }
+    console.log();
+  }
+
+  console.log(chalk.gray("\nExiting Barkcode. Rhino will remain open."));
 }
