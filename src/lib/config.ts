@@ -90,9 +90,9 @@ export function getCommand(config: BarkcodeConfig, commandNameOrIndex: string | 
     return cmd;
   }
 
-  const cmd = config.commands.find((c) => c.name === commandNameOrIndex);
+  const cmd = config.commands.find((c) => c.id === commandNameOrIndex || c.name === commandNameOrIndex);
   if (!cmd) {
-    const available = config.commands.map((c) => c.name).join(", ");
+    const available = config.commands.map((c) => c.id ? `${c.name} (${c.id})` : c.name).join(", ");
     throw new Error(`Command "${commandNameOrIndex}" not found. Available: ${available}`);
   }
   return cmd;

@@ -4,6 +4,7 @@ export type BarkcodeConfig = {
 };
 
 export type BarkCommand = {
+  id?: string;
   name: string;
   description?: string;
   rhCommand: string;

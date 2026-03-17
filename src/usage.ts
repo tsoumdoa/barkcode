@@ -7,15 +7,12 @@ export function printUsage() {
   console.log();
   console.log(chalk.white("Commands:"));
   console.log(
-    chalk.gray("  ") + chalk.cyan("start     ") + chalk.gray("Launch Rhino 8"),
+    chalk.gray("  ") + chalk.cyan("run       ") + chalk.gray("Launch Rhino 8 with interactive menu"),
   );
   console.log(
     chalk.gray("  ") +
       chalk.cyan("init      ") +
       chalk.gray("Initialize a new project"),
-  );
-  console.log(
-    chalk.gray("  ") + chalk.cyan("run       ") + chalk.gray("Run a script"),
   );
   console.log();
 }

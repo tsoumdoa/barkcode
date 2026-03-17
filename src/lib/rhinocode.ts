@@ -19,7 +19,7 @@ export async function connect(): Promise<RhinoInstance> {
 
   const lines = output.trim().split("\n").filter(Boolean);
   if (lines.length <= 1) {
-    throw new Error("No Rhino instance found. Start Rhino first with 'bark start'");
+    throw new Error("No Rhino instance found. Start Rhino first with 'bark run'");
   }
 
   const lastLine = lines[lines.length - 1] || "";

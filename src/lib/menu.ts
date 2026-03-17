@@ -1,9 +1,9 @@
 import chalk from "chalk";
-import { select, input } from "@inquirer/prompts";
+import { select } from "@inquirer/prompts";
 import type { BarkcodeConfig, BarkCommand, RhinoInstance } from "../types.js";
 import { processBatch, printBatchSummary, collectFiles } from "./batch.js";
 
-type MenuChoice = { type: "command"; index: number } | { type: "custom" } | { type: "exit" };
+type MenuChoice = { type: "command"; index: number } | { type: "exit" };
 
 export async function showCommandMenu(
   config: BarkcodeConfig,
@@ -12,11 +12,10 @@ export async function showCommandMenu(
 ): Promise<boolean> {
   const choices: Array<{ name: string; value: string; description?: string }> = [
     ...config.commands.map((cmd, i) => ({
-      name: `${i + 1}. ${cmd.name}`,
+      name: cmd.id ? `${i + 1}. ${cmd.name} (${cmd.id})` : `${i + 1}. ${cmd.name}`,
       value: String(i),
       description: cmd.description,
     })),
-    { name: "Custom Rhino command", value: "custom", description: "Enter a custom Rhino command" },
     { name: "Exit", value: "exit", description: "Return to terminal" },
   ];
 
@@ -30,11 +29,6 @@ export async function showCommandMenu(
     return false;
   }
 
-  if (selected === "custom") {
-    await runCustomCommand(instance);
-    return true;
-  }
-
   const index = parseInt(selected, 10);
   const command = config.commands[index];
 
@@ -43,30 +37,6 @@ export async function showCommandMenu(
   }
 
   return true;
-}
-
-async function runCustomCommand(instance: RhinoInstance): Promise<void> {
-  const customCmd = await input({
-    message: "Enter Rhino command:",
-    validate: (value) => value.trim().length > 0,
-  });
-
-  console.log(chalk.gray(`\nExecuting: ${customCmd}`));
-
-  const { execute } = await import("./rhinocode.js");
-  const result = await execute(instance, customCmd);
-
-  if (result.success) {
-    console.log(chalk.green("✓ ") + chalk.white("Command completed"));
-    if (result.output) {
-      console.log(chalk.gray(result.output));
-    }
-  } else {
-    console.log(chalk.red("✗ Command failed"));
-    if (result.error) {
-      console.log(chalk.red(result.error));
-    }
-  }
 }
 
 async function runConfiguredCommand(

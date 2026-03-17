@@ -3,6 +3,7 @@ import { RHINO_PATH, isMac } from "../constants";
 import { connect, isRhinocodeAvailable, listRhinoInstances } from "../lib/rhinocode.js";
 import { loadConfig } from "../lib/config.js";
 import { showCommandMenu } from "../lib/menu.js";
+import { collectFiles, processBatch, printBatchSummary } from "../lib/batch.js";
 import { existsSync } from "fs";
 
 function delay(ms: number) {
@@ -67,8 +68,8 @@ async function waitForRhinoInstances(expectedCount: number): Promise<string[]> {
   }
 }
 
-export async function start(options: { spawn?: number; config?: string; command?: string } = {}) {
-  const { spawn: spawnCount = 1, config: configPath, command: commandName } = options;
+export async function startRun(options: { spawn?: number; config?: string; command?: string; dryRun?: boolean } = {}) {
+  const { spawn: spawnCount = 1, config: configPath, command: commandName, dryRun: isDryRun = false } = options;
 
   setupExitHandler();
 
@@ -139,13 +140,19 @@ export async function start(options: { spawn?: number; config?: string; command?
 
     console.log(chalk.gray(`Found ${files.length} file(s)\n`));
 
+    if (isDryRun) {
+      console.log(chalk.yellow("=== DRY RUN MODE ===\n"));
+    }
+
     const { summary } = await processBatch(command, files, projectRoot, instance, {
       outputFolder: command.outputFolder,
-      dryRun: false,
+      dryRun: isDryRun,
       onConflict: command.onConflict || "error",
     });
 
-    printBatchSummary(summary);
+    if (!isDryRun) {
+      printBatchSummary(summary);
+    }
     process.exit(summary.failed > 0 ? 1 : 0);
   }
 

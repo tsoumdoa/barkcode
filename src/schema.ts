@@ -69,6 +69,7 @@ export const RenameOptionsSchema = z.object({
 });
 
 export const BarkCommandSchema = z.object({
+  id: z.string().optional(),
   name: z.string(),
   description: z.string().optional(),
   rhCommand: z.string(),
