@@ -1,10 +1,10 @@
 import chalk from "chalk";
 import { RHINO_PATH } from "../constants";
-import { connect, isRhinocodeAvailable } from "../lib/rhinocode.js";
-import { loadConfig } from "../lib/config.js";
-import { showCommandMenu } from "../lib/menu.js";
-import { printBatchSummary, processBatch } from "../lib/batch.js";
-import { displayMessage, displaySuccess, displayError, displayWarning, displayInfo, displayBold } from "../lib/logger.js";
+import { connect, isRhinocodeAvailable } from "../lib/rhinocode";
+import { loadConfig } from "../lib/config";
+import { showCommandMenu } from "../lib/menu";
+import { printBatchSummary, processBatch } from "../lib/batch";
+import { displayMessage, displaySuccess, displayError, displayWarning, displayInfo, displayBold } from "../lib/logger";
 
 function delay(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));

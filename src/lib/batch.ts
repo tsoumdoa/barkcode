@@ -1,12 +1,11 @@
 import { glob } from "glob";
 import { resolve, relative, dirname, join } from "path";
 import { existsSync, mkdirSync } from "fs";
-import chalk from "chalk";
-import type { BatchOptions, BatchSummary, FileMapping, BarkCommand } from "../types.js";
-import { renameFile, sanitizeFilename } from "./rename.js";
-import { executeOnFile } from "./rhinocode.js";
-import type { RhinoInstance } from "../types.js";
-import { displayConflict, displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed } from "./logger.js";
+import type { BatchOptions, BatchSummary, FileMapping, BarkCommand } from "../types";
+import { renameFile, sanitizeFilename } from "./rename";
+import { executeOnFile } from "./rhinocode";
+import type { RhinoInstance } from "../types";
+import { displayConflict, displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed } from "./logger";
 
 export async function collectFiles(
   inputFolder: string,

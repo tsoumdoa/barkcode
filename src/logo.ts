@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { displayInfo, displayBold } from "./lib/logger.js";
+import { displayInfo, displayBold } from "./lib/logger";
 
 export function logo() {
   console.log(

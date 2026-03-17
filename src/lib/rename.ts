@@ -1,4 +1,4 @@
-import type { RenameOptions, RenameResult, RenameRule, RenameContext } from "../types.js";
+import type { RenameOptions, RenameResult, RenameRule, RenameContext } from "../types";
 import { extname, basename, dirname, join } from "path";
 
 export function getFileParts(filePath: string): { name: string; ext: string } {

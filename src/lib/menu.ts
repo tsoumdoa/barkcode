@@ -1,8 +1,7 @@
-import chalk from "chalk";
 import { select } from "@inquirer/prompts";
-import type { BarkcodeConfig, BarkCommand, RhinoInstance } from "../types.js";
-import { processBatch, printBatchSummary, collectFiles } from "./batch.js";
-import { displayBold, displayInfo, displayWarning } from "./logger.js";
+import type { BarkcodeConfig, BarkCommand, RhinoInstance } from "../types";
+import { processBatch, printBatchSummary, collectFiles } from "./batch";
+import { displayBold, displayInfo, displayWarning } from "./logger";
 
 type MenuChoice = { type: "command"; index: number } | { type: "exit" };
 

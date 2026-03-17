@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
-import type { RhinoInstance, CommandResult, ExecuteOptions } from "../types.js";
-import { DEFAULT_TIMEOUT } from "../constants.js";
-import { displayInfo } from "./logger.js";
+import type { RhinoInstance, CommandResult, ExecuteOptions } from "../types";
+import { DEFAULT_TIMEOUT } from "../constants";
+import { displayInfo } from "./logger";
 
 export async function connect(): Promise<RhinoInstance> {
   const proc = spawn("rhinocode", ["list"], {

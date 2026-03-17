@@ -1,9 +1,8 @@
-import chalk from "chalk";
 import { writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { resolve } from "path";
 import { confirm } from "@inquirer/prompts";
-import { displayMessage, displayWarning, displayInfo } from "../lib/logger.js";
+import { displayMessage, displayWarning, displayInfo } from "../lib/logger";
 
 const DEFAULT_CONFIG = {
   version: "1.0",

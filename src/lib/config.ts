@@ -1,8 +1,8 @@
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
 import { resolve, dirname, sep } from "path";
-import type { BarkcodeConfig, LoadedConfig, ConfigLoadOptions } from "../types.js";
-import { validateConfig } from "../schema.js";
+import type { BarkcodeConfig, LoadedConfig, ConfigLoadOptions } from "../types";
+import { validateConfig } from "../schema";
 
 const CONFIG_FILENAME = "barkcode.json";
 
