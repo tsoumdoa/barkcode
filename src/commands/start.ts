@@ -29,12 +29,17 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 		process.exit(1);
 	}
 
+	displayInfo("Checking for rhinocode...");
+	await rhinoRunner.checkRhinocodeOrExit();
+	displaySuccess("rhinocode found.");
+
 	const { config, projectRoot } = loadedConfig;
 
 	displaySuccess(`Config loaded from ${loadedConfig.configPath}`);
 	displayInfo(`  Project root: ${projectRoot}\n`);
 
 	const instances = await rhinoRunner.getRunningProcesses();
+
 
 	if (commandName) {
 		const command = getCommand(config, commandName);
@@ -69,11 +74,7 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 			});
 			console.log();
 			displayWarning("Dry run complete. No changes made.");
-			process.exit(0);
 		}
-
-		await rhinoRunner.checkRhinocodeOrExit();
-
 
 		if (!isDryRun) {
 			displayInfo("Launching Rhino 8...");
@@ -98,12 +99,7 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 		});
 
 		printBatchSummary(summary);
-		process.exit(summary.failed > 0 ? 1 : 0);
 	}
-
-	displayInfo("Checking for rhinocode...");
-
-	displaySuccess("rhinocode found.");
 
 
 	displayInfo("\nPress Ctrl+C to exit\n");
