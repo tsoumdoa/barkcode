@@ -1,13 +1,12 @@
 import { select } from "@inquirer/prompts";
-import type { BarkcodeConfig, BarkCommand, RhinoInstance } from "../types";
+import type { BarkcodeConfig, BarkCommand } from "../types";
 import { processBatch, printBatchSummary, collectFiles } from "./batch";
 import { displayBold, displayInfo, displayWarning } from "./logger";
 
-type MenuChoice = { type: "command"; index: number } | { type: "exit" };
 
 export async function showCommandMenu(
   config: BarkcodeConfig,
-  instance: RhinoInstance,
+  instances: string[],
   projectRoot: string,
 ): Promise<boolean> {
   const choices: Array<{ name: string; value: string; description?: string }> = [
@@ -33,7 +32,7 @@ export async function showCommandMenu(
   const command = config.commands[index];
 
   if (command) {
-    await runConfiguredCommand(command, instance, projectRoot);
+    await runConfiguredCommand(command, instances, projectRoot);
   }
 
   return true;
@@ -41,7 +40,7 @@ export async function showCommandMenu(
 
 async function runConfiguredCommand(
   command: BarkCommand,
-  instance: RhinoInstance,
+  instances: string[],
   projectRoot: string,
 ): Promise<void> {
   displayBold(`\nRunning: ${command.name}`);

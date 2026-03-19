@@ -3,11 +3,13 @@ import { existsSync } from "fs";
 import { resolve } from "path";
 import { confirm } from "@inquirer/prompts";
 import { displayMessage, displayWarning, displayInfo } from "../lib/logger";
+import { BarkcodeConfig } from "../types";
 
-const DEFAULT_CONFIG = {
+const DEFAULT_CONFIG: BarkcodeConfig = {
   version: "1.0",
   commands: [
     {
+			id: "convert:step",
       name: "Convert 3DM to STEP",
       description: "Convert all 3DM files to STEP format",
       rhCommand: "_-Export",
@@ -22,6 +24,7 @@ const DEFAULT_CONFIG = {
       timeout: 300,
     },
     {
+			id: "convert:stl",
       name: "Batch STL Export",
       description: "Export 3DM files to STL for 3D printing",
       rhCommand: "_-Export",
@@ -34,6 +37,7 @@ const DEFAULT_CONFIG = {
       onConflict: "rename",
     },
     {
+			id: "convert:dxf",
       name: "Run Analysis Script",
       description: "Run custom Python analysis on selected file",
       rhCommand: "_RunPythonScript",

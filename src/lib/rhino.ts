@@ -45,12 +45,22 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false) {
 				);
 			}
 		},
+		async checkRhinocodeOrExit(): Promise<void> {
+			if(dryMode) return;
+			const hasRhinocode = await isRhinocodeAvailable();
+			if (!hasRhinocode) {
+				displayError("rhinocode not recognized!");
+				displayInfo("  Ensure rhinocode is in your system PATH.");
+				process.exit(1);
+			}
+		}
+
 	};
 }
 
 export async function getRunningProcesses(): Promise<string[]> {
 	const { output } = await isRhinoRunning();
-	if (!output.trim()) return [];
+	if (!output.trim()) return [""];
 
 	const lines = output.trim().split("\n").slice(1);
 	return lines
@@ -82,18 +92,4 @@ export async function waitForRhinoInstances(expectedCount: number): Promise<stri
 	}
 }
 
-export function setupExitHandler(): void {
-	process.on("SIGINT", () => {
-		displayWarning("\n\nExiting Barkcode. Rhino will remain open.");
-		process.exit(0);
-	});
-}
 
-export async function checkRhinocodeOrExit(): Promise<void> {
-	const hasRhinocode = await isRhinocodeAvailable();
-	if (!hasRhinocode) {
-		displayError("rhinocode not recognized!");
-		displayInfo("  Ensure rhinocode is in your system PATH.");
-		process.exit(1);
-	}
-}

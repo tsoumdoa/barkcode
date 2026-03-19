@@ -1,22 +1,19 @@
-import { connect } from "../lib/rhinocode";
-import { loadConfig } from "../lib/config";
-import { showCommandMenu } from "../lib/menu";
-import { printBatchSummary, processBatch } from "../lib/batch";
+import { getCommand, loadConfig } from "../lib/config";
+import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
 import { displaySuccess, displayError, displayWarning, displayInfo, displayBold } from "../lib/logger";
-import { createRhinoRunner, getRunningProcesses, waitForRhinoInstances, setupExitHandler, checkRhinocodeOrExit, isRhinoRunning } from "../lib/rhino";
+import { createRhinoRunner, getRunningProcesses, waitForRhinoInstances } from "../lib/rhino";
 
 import { RHINO_PATH } from "../constants";
+import { showCommandMenu } from "../lib/menu";
 
 export async function startRun(options: { spawn?: number; config?: string; command?: string; dryRun?: boolean } = {}) {
 	const { spawn: spawnCount = 1, config: configPath, command: commandName, dryRun: isDryRun = false } = options;
 
-	const rhinoRunner = createRhinoRunner(RHINO_PATH, isDryRun);
-
-	setupExitHandler();
-
 	if (isDryRun) {
 		displayWarning("=== DRY RUN MODE ===\n");
 	}
+
+	const rhinoRunner = createRhinoRunner(RHINO_PATH, isDryRun);
 
 	displayInfo("Checking for Rhino 8...");
 	await rhinoRunner.checkRhinoOrExit();
@@ -37,11 +34,11 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 	displaySuccess(`Config loaded from ${loadedConfig.configPath}`);
 	displayInfo(`  Project root: ${projectRoot}\n`);
 
+	const instances = await getRunningProcesses();
+
 	if (commandName) {
-		const { getCommand } = await import("../lib/config.js");
 		const command = getCommand(config, commandName);
 
-		const { collectFiles } = await import("../lib/batch.js");
 
 		displayBold(`Running: ${command.name}`);
 
@@ -51,7 +48,7 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 
 		const files = await collectFiles(inputFolder, inputPattern, isRecursive, projectRoot);
 
-		if (files.length === 0) {
+		if (files.length === 0 && !isDryRun) {
 			displayWarning(`No files found matching ${inputPattern}`);
 			process.exit(1);
 		}
@@ -75,10 +72,9 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 			process.exit(0);
 		}
 
-		await checkRhinocodeOrExit();
+		await rhinoRunner.checkRhinocodeOrExit();
 
 
-		const instances = await getRunningProcesses();
 		if (!isDryRun) {
 			displayInfo("Launching Rhino 8...");
 			rhinoRunner.spawnRhino(spawnCount);
@@ -106,36 +102,14 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 	}
 
 	displayInfo("Checking for rhinocode...");
-	await checkRhinocodeOrExit();
 
 	displaySuccess("rhinocode found.");
 
-	const rhinoRunningResult = await isRhinoRunning();
 
-	if (!rhinoRunningResult.running) {
-		displayInfo("\nLaunching Rhino 8...");
-		rhinoRunner.spawnRhino(spawnCount);
-		const processes = await waitForRhinoInstances(spawnCount);
-		displaySuccess(`Rhino started (${processes.length} instance(s)\n`);
-	} else {
-		displayInfo("\nRhino is already running.\n");
-	}
-
-	let instance;
-	try {
-		instance = await connect();
-	} catch (e) {
-		const err = e as Error;
-		displayError(err.message);
-		displayWarning("\nStart Rhino first if it's not running.");
-		process.exit(1);
-	}
-
-	displaySuccess(`Connected to Rhino ${instance.id}`);
 	displayInfo("\nPress Ctrl+C to exit\n");
 
 	while (true) {
-		const shouldContinue = await showCommandMenu(config, instance, projectRoot);
+		const shouldContinue = await showCommandMenu(config, instances, projectRoot);
 		if (!shouldContinue) {
 			break;
 		}
