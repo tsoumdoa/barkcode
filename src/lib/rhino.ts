@@ -71,6 +71,39 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 				})
 				.filter((p): p is string => p !== null);
 		},
+		async runCommand(options: {
+			command: { name: string; rhCommand: string; outputFolder?: string; inputMode?: string; onConflict?: string };
+			files: string[];
+			inputFolder: string;
+			inputPattern: string;
+			isRecursive: boolean;
+			isDryRun: boolean;
+		}): Promise<string[]> {
+			const { command, files, inputFolder, inputPattern, isRecursive, isDryRun } = options;
+
+			if (isDryRun) {
+				displayWarning("=== DRY RUN MODE ===\n");
+				displayInfo("Command: " + command.rhCommand);
+				displayInfo("Input: " + `${inputFolder}/${inputPattern}`);
+				displayInfo("Output: " + (command.outputFolder || "(default)"));
+				displayInfo("Recursive: " + String(isRecursive));
+				displayInfo("Mode: " + (command.inputMode || "batch"));
+				console.log();
+				displaySuccess("Files that would be processed:");
+				files.forEach((file) => {
+					displayInfo("  - " + file);
+				});
+				console.log();
+				displayWarning("Dry run complete. No changes made.");
+				return Array.from({ length: spawnCount }, (_, i) => `Rhino_${i + 1}`);
+			}
+
+			displayInfo("Launching Rhino 8...");
+			this.spawnRhino(spawnCount);
+			const processes = await waitForRhinoInstances(spawnCount);
+			displaySuccess(`Rhino started (${processes.length} instance(s)\n`);
+			return processes;
+		},
 	};
 }
 

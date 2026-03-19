@@ -1,7 +1,7 @@
 import { getCommand, loadConfig } from "../lib/config";
 import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
 import { displaySuccess, displayError, displayWarning, displayInfo, displayBold } from "../lib/logger";
-import { createRhinoRunner, waitForRhinoInstances } from "../lib/rhino";
+import { createRhinoRunner } from "../lib/rhino";
 
 import { RHINO_PATH } from "../constants";
 import { showCommandMenu } from "../lib/menu";
@@ -38,8 +38,7 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 	displaySuccess(`Config loaded from ${loadedConfig.configPath}`);
 	displayInfo(`  Project root: ${projectRoot}\n`);
 
-	const instances = await rhinoRunner.getRunningProcesses();
-
+	let instances = await rhinoRunner.getRunningProcesses();
 
 	if (commandName) {
 		const command = getCommand(config, commandName);
@@ -60,32 +59,14 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 
 		displayInfo(`Found ${files.length} file(s)\n`);
 
-		if (isDryRun) {
-			displayWarning("=== DRY RUN MODE ===\n");
-			displayInfo("Command: " + command.rhCommand);
-			displayInfo("Input: " + `${inputFolder}/${inputPattern}`);
-			displayInfo("Output: " + (command.outputFolder || "(default)"));
-			displayInfo("Recursive: " + String(isRecursive));
-			displayInfo("Mode: " + (command.inputMode || "batch"));
-			console.log();
-			displaySuccess("Files that would be processed:");
-			files.forEach((file) => {
-				displayInfo("  - " + file);
-			});
-			console.log();
-			displayWarning("Dry run complete. No changes made.");
-		}
-
-		if (!isDryRun) {
-			displayInfo("Launching Rhino 8...");
-			rhinoRunner.spawnRhino(spawnCount);
-
-			const processes = await waitForRhinoInstances(spawnCount);
-			displaySuccess(`Rhino started (${processes.length} instance(s)\n`);
-		} else {
-			displaySuccess(`Found ${spawnCount} running Rhino instance(s)\n`);
-		}
-
+		instances = await rhinoRunner.runCommand({
+			command,
+			files,
+			inputFolder,
+			inputPattern,
+			isRecursive,
+			isDryRun,
+		});
 
 		instances.forEach((instance) => {
 			displaySuccess(`Connected to Rhino ${instance}\n`);
