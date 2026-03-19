@@ -16,7 +16,7 @@ export async function isRhinoRunning(): Promise<{ running: boolean; output: stri
 	return { running: output.includes("rhinocode_remotepipe"), output };
 }
 
-export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false) {
+export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, spawnCount: number = 1) {
 	return {
 		async checkRhinoOrExit() {
 			if (dryMode) return;
@@ -31,9 +31,9 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false) {
 				process.exit(1);
 			}
 		},
-		spawnRhino(spawnCount: number) {
+		spawnRhino(count: number) {
 			if (dryMode) return;
-			for (let i = 0; i < spawnCount; i++) {
+			for (let i = 0; i < count; i++) {
 				Bun.spawn(
 					[RHINO_PATH, "/nosplash", '/runscript="_StartScriptServer"'],
 					{
@@ -46,22 +46,37 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false) {
 			}
 		},
 		async checkRhinocodeOrExit(): Promise<void> {
-			if(dryMode) return;
+			if (dryMode) return;
 			const hasRhinocode = await isRhinocodeAvailable();
 			if (!hasRhinocode) {
 				displayError("rhinocode not recognized!");
 				displayInfo("  Ensure rhinocode is in your system PATH.");
 				process.exit(1);
 			}
-		}
-
+		},
+		getRunningProcesses: async () => {
+			if (dryMode) {
+				return Array.from({ length: spawnCount }, (_, i) => `Rhino_${i + 1}`);
+			}
+			const { output } = await isRhinoRunning();
+			if (!output.trim()) return [""];
+			const lines = output.trim().split("\n").slice(1);
+			return lines
+				.map((line) => {
+					const parts = line.trim().split(/\s+/);
+					if (parts.length >= 2) {
+						return parts[1];
+					}
+					return null;
+				})
+				.filter((p): p is string => p !== null);
+		},
 	};
 }
 
-export async function getRunningProcesses(): Promise<string[]> {
+async function getRunningProcessesReal(): Promise<string[]> {
 	const { output } = await isRhinoRunning();
 	if (!output.trim()) return [""];
-
 	const lines = output.trim().split("\n").slice(1);
 	return lines
 		.map((line) => {
@@ -76,7 +91,7 @@ export async function getRunningProcesses(): Promise<string[]> {
 
 export async function waitForRhinoInstances(expectedCount: number): Promise<string[]> {
 	while (true) {
-		const processes = await getRunningProcesses();
+		const processes = await getRunningProcessesReal();
 		const currentCount = processes.length;
 		console.log(
 			chalk.gray(

@@ -1,7 +1,7 @@
 import { getCommand, loadConfig } from "../lib/config";
 import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
 import { displaySuccess, displayError, displayWarning, displayInfo, displayBold } from "../lib/logger";
-import { createRhinoRunner, getRunningProcesses, waitForRhinoInstances } from "../lib/rhino";
+import { createRhinoRunner, waitForRhinoInstances } from "../lib/rhino";
 
 import { RHINO_PATH } from "../constants";
 import { showCommandMenu } from "../lib/menu";
@@ -13,7 +13,7 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 		displayWarning("=== DRY RUN MODE ===\n");
 	}
 
-	const rhinoRunner = createRhinoRunner(RHINO_PATH, isDryRun);
+	const rhinoRunner = createRhinoRunner(RHINO_PATH, isDryRun, spawnCount);
 
 	displayInfo("Checking for Rhino 8...");
 	await rhinoRunner.checkRhinoOrExit();
@@ -34,7 +34,7 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 	displaySuccess(`Config loaded from ${loadedConfig.configPath}`);
 	displayInfo(`  Project root: ${projectRoot}\n`);
 
-	const instances = await getRunningProcesses();
+	const instances = await rhinoRunner.getRunningProcesses();
 
 	if (commandName) {
 		const command = getCommand(config, commandName);
