@@ -71,6 +71,8 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 				})
 				.filter((p): p is string => p !== null);
 		},
+		waitForRhinoInstances,
+
 		async runCommand(options: {
 			command: { name: string; rhCommand: string; outputFolder?: string; inputMode?: string; onConflict?: string };
 			files: string[];
@@ -78,7 +80,7 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 			inputPattern: string;
 			isRecursive: boolean;
 			isDryRun: boolean;
-		}): Promise<string[]> {
+		}): Promise<void> {
 			const { command, files, inputFolder, inputPattern, isRecursive, isDryRun } = options;
 
 			if (isDryRun) {
@@ -95,14 +97,8 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 				});
 				console.log();
 				displayWarning("Dry run complete. No changes made.");
-				return Array.from({ length: spawnCount }, (_, i) => `Rhino_${i + 1}`);
+				return;
 			}
-
-			displayInfo("Launching Rhino 8...");
-			this.spawnRhino(spawnCount);
-			const processes = await waitForRhinoInstances(spawnCount);
-			displaySuccess(`Rhino started (${processes.length} instance(s)\n`);
-			return processes;
 		},
 	};
 }

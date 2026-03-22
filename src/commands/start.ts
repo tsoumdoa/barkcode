@@ -40,6 +40,15 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 
 	let instances = await rhinoRunner.getRunningProcesses();
 
+	if (!isDryRun && instances.length < spawnCount) {
+		displayInfo("Launching Rhino 8...");
+		rhinoRunner.spawnRhino(spawnCount - instances.length);
+		instances = await rhinoRunner.waitForRhinoInstances(spawnCount);
+		instances.forEach((instance) => {
+			displaySuccess(`Connected to Rhino ${instance}\n`);
+		});
+	}
+
 	if (commandName) {
 		const command = getCommand(config, commandName);
 
@@ -59,7 +68,7 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 
 		displayInfo(`Found ${files.length} file(s)\n`);
 
-		instances = await rhinoRunner.runCommand({
+		await rhinoRunner.runCommand({
 			command,
 			files,
 			inputFolder,
@@ -67,11 +76,6 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 			isRecursive,
 			isDryRun,
 		});
-
-		instances.forEach((instance) => {
-			displaySuccess(`Connected to Rhino ${instance}\n`);
-		});
-
 
 		const { summary } = await processBatch(command, files, projectRoot, instances, {
 			outputFolder: command.outputFolder,

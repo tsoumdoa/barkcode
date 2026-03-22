@@ -24,7 +24,7 @@ async function main() {
     .option("-d, --dry-run", "Preview without executing")
     .action(async (commandId, options) => {
       await startRun({
-        spawn: parseInt(options.spawn),
+        spawn: Number(options.spawn) || 1,
         config: options.config,
         command: commandId,
         dryRun: options.dryRun,

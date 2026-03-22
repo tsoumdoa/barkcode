@@ -60,7 +60,7 @@ async function runConfiguredCommand(
 
   displayInfo(`  Found ${files.length} file(s)`);
 
-  const { summary } = await processBatch(command, files, projectRoot, instance, {
+  const { summary } = await processBatch(command, files, projectRoot, instances, {
     outputFolder: command.outputFolder,
     dryRun: false,
     onConflict: command.onConflict || "error",
