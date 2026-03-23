@@ -1,13 +1,8 @@
-import { getCommand, loadConfig } from "../lib/config";
-import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
-import { displaySuccess, displayError, displayWarning, displayInfo, displayBold } from "../lib/logger";
 import { createRhinoRunner } from "../lib/rhino";
-
 import { RHINO_PATH } from "../constants";
 import { showCommandMenu } from "../lib/menu";
-
-
-
+import { displaySuccess, displayWarning, displayInfo } from "../lib/logger";
+import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./start-helpers";
 
 export async function startRun(options: { spawn?: number; config?: string; command?: string; dryRun?: boolean } = {}) {
 	const { spawn: spawnCount = 1, config: configPath, command: commandName, dryRun: isDryRun = false } = options;
@@ -18,72 +13,18 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 	}
 
 	await rhinoRunner.checkRhinoOrExit();
-
-	let loadedConfig;
-	try {
-		loadedConfig = await loadConfig({ configPath });
-	} catch (e) {
-		const err = e as Error;
-		displayError(err.message);
-		displayInfo("\nRun `bark init` to create a barkcode.json file.");
-		process.exit(1);
-	}
-
+	const loadedConfig = await loadConfigOrExit({ configPath });
 	await rhinoRunner.checkRhinocodeOrExit();
 
 	const { config, projectRoot } = loadedConfig;
-
 	displaySuccess(`Config loaded from ${loadedConfig.configPath}`);
 	displayInfo(`  Project root: ${projectRoot}\n`);
 
-	let instances = await rhinoRunner.getRunningProcesses();
-
-	if (!isDryRun && instances.length < spawnCount) {
-		displayInfo("Launching Rhino 8...");
-		rhinoRunner.spawnRhino(spawnCount - instances.length);
-		instances = await rhinoRunner.waitForRhinoInstances(spawnCount);
-		instances.forEach((instance) => {
-			displaySuccess(`Connected to Rhino ${instance}\n`);
-		});
-	}
+	const instances = await ensureRhinoInstances(rhinoRunner, spawnCount, isDryRun);
 
 	if (commandName) {
-		const command = getCommand(config, commandName);
-
-
-		displayBold(`Running: ${command.name}`);
-
-		const inputPattern = command.inputPattern || "*.3dm";
-		const inputFolder = command.inputFolder || ".";
-		const isRecursive = command.recursive ?? false;
-
-		const files = await collectFiles(inputFolder, inputPattern, isRecursive, projectRoot);
-
-		if (files.length === 0 && !isDryRun) {
-			displayWarning(`No files found matching ${inputPattern}`);
-			process.exit(1);
-		}
-
-		displayInfo(`Found ${files.length} file(s)\n`);
-
-		await rhinoRunner.runCommand({
-			command,
-			files,
-			inputFolder,
-			inputPattern,
-			isRecursive,
-			isDryRun,
-		});
-
-		const { summary } = await processBatch(command, files, projectRoot, instances, {
-			outputFolder: command.outputFolder,
-			dryRun: false,
-			onConflict: command.onConflict || "error",
-		});
-
-		printBatchSummary(summary);
+		await executeCommandIfRequested(rhinoRunner, commandName, config, projectRoot, instances, isDryRun);
 	}
-
 
 	displayInfo("\nPress Ctrl+C to exit\n");
 
