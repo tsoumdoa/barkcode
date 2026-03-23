@@ -6,18 +6,18 @@ import { createRhinoRunner } from "../lib/rhino";
 import { RHINO_PATH } from "../constants";
 import { showCommandMenu } from "../lib/menu";
 
+
+
+
 export async function startRun(options: { spawn?: number; config?: string; command?: string; dryRun?: boolean } = {}) {
 	const { spawn: spawnCount = 1, config: configPath, command: commandName, dryRun: isDryRun = false } = options;
+	const rhinoRunner = createRhinoRunner(RHINO_PATH, isDryRun, spawnCount);
 
 	if (isDryRun) {
 		displayWarning("=== DRY RUN MODE ===\n");
 	}
 
-	const rhinoRunner = createRhinoRunner(RHINO_PATH, isDryRun, spawnCount);
-
-	displayInfo("Checking for Rhino 8...");
 	await rhinoRunner.checkRhinoOrExit();
-	displaySuccess("Rhino 8 found.\n");
 
 	let loadedConfig;
 	try {
@@ -29,9 +29,7 @@ export async function startRun(options: { spawn?: number; config?: string; comma
 		process.exit(1);
 	}
 
-	displayInfo("Checking for rhinocode...");
 	await rhinoRunner.checkRhinocodeOrExit();
-	displaySuccess("rhinocode found.");
 
 	const { config, projectRoot } = loadedConfig;
 

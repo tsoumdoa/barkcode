@@ -19,10 +19,11 @@ export async function isRhinoRunning(): Promise<{ running: boolean; output: stri
 export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, spawnCount: number = 1) {
 	return {
 		async checkRhinoOrExit() {
+
+			displayInfo("Checking for Rhino 8...");
 			if (dryMode) return;
 			const file = Bun.file(rhinoPath);
 			const exists = await file.exists();
-
 			if (!exists) {
 				displayError("Rhino not found!");
 				displayInfo("  Expected at: " + rhinoPath);
@@ -30,6 +31,7 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 				displayWarning("Please check your Rhino 8 installation.");
 				process.exit(1);
 			}
+			displaySuccess("Rhino 8 found.\n");
 		},
 		spawnRhino(count: number) {
 			if (dryMode) return;
@@ -46,6 +48,7 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 			}
 		},
 		async checkRhinocodeOrExit(): Promise<void> {
+			displayInfo("Checking for rhinocode...");
 			if (dryMode) return;
 			const hasRhinocode = await isRhinocodeAvailable();
 			if (!hasRhinocode) {
@@ -53,6 +56,7 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 				displayInfo("  Ensure rhinocode is in your system PATH.");
 				process.exit(1);
 			}
+			displaySuccess("rhinocode found.");
 		},
 		getRunningProcesses: async () => {
 			if (dryMode) {
