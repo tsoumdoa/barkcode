@@ -3,6 +3,7 @@ import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
 import { displaySuccess, displayError, displayWarning, displayInfo, displayBold } from "../lib/logger";
 import { createRhinoRunner } from "../lib/rhino";
 import { BarkcodeConfig } from "../types";
+import { platform } from "os";
 
 export async function loadConfigOrExit(options: { configPath?: string }) {
 	let loadedConfig;
@@ -22,11 +23,21 @@ export async function ensureRhinoInstances(
 	spawnCount: number,
 	isDryRun: boolean,
 ) {
+	if (platform() === "darwin" && spawnCount > 1) {
+		displayWarning("On Mac, Rhino only allows one instance. Using --spawn=1.\n");
+		spawnCount = 1;
+	}
+
 	let instances = await rhinoRunner.getRunningProcesses();
 
 	if (!isDryRun && instances.length < spawnCount) {
-		displayInfo("Launching Rhino 8...");
-		rhinoRunner.spawnRhino(spawnCount - instances.length);
+		if (platform() === "darwin") {
+			displayWarning(`On Mac, please manually open ${spawnCount} Rhino instance(s) and run the _StartScriptServer command in each.\n`);
+			displayInfo("Waiting for user to start Rhino instances...\n");
+		} else {
+			displayInfo("Launching Rhino 8...");
+			rhinoRunner.spawnRhino(spawnCount - instances.length);
+		}
 		instances = await rhinoRunner.waitForRhinoInstances(spawnCount);
 		instances.forEach((instance) => {
 			displaySuccess(`Connected to Rhino ${instance}\n`);

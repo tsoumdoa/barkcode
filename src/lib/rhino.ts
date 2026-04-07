@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { platform } from "os";
 import { RHINO_PATH } from "../constants";
 import { isRhinocodeAvailable } from "./rhinocode";
 import { displayError, displayInfo, displayWarning, displaySuccess } from "./logger";
@@ -22,6 +23,7 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 
 			displayInfo("Checking for Rhino 8...");
 			if (dryMode) return;
+			if (platform() === "darwin") return;
 			const file = Bun.file(rhinoPath);
 			const exists = await file.exists();
 			if (!exists) {
