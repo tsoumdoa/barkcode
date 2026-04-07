@@ -1,261 +1,149 @@
 import { glob } from "glob";
-import { resolve, relative, dirname, join } from "path";
-import { existsSync, mkdirSync } from "fs";
-import type { BatchOptions, BatchSummary, FileMapping, BarkCommand } from "../types";
-import { renameFile, sanitizeFilename } from "./rename";
-import { executeOnFile } from "./rhinocode";
-import type { RhinoInstance } from "../types";
-import { displayConflict, displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed } from "./logger";
+import chalk from "chalk";
+import { resolve, join } from "path";
+import type { BatchSummary, FileMapping, BarkCommand } from "../types";
+import { execute, closeAll } from "./rhinocode";
+import { displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug } from "./logger";
 
 export async function collectFiles(
-  inputFolder: string,
-  pattern: string,
-  recursive: boolean,
-  projectRoot: string,
+	inputFolder: string,
+	pattern: string,
+	projectRoot: string,
 ): Promise<string[]> {
-  const fullInputPath = resolve(projectRoot, inputFolder);
-  const globPattern = recursive
-    ? join(fullInputPath, "**", pattern)
-    : join(fullInputPath, pattern);
+	const fullInputPath = resolve(projectRoot, inputFolder);
+	const globPattern = join(fullInputPath, "**", pattern);
 
-  const files = await glob(globPattern, {
-    nodir: true,
-    dot: false,
-  });
+	displayDebug("collectFiles", `inputFolder: ${inputFolder}`);
+	displayDebug("collectFiles", `globPattern: ${globPattern}`);
 
-  return files;
+	const files = await glob(globPattern, {
+		nodir: true,
+		dot: false,
+	});
+
+	displayDebug("collectFiles", `found ${files.length} file(s)`);
+
+	return files;
 }
-
-export function computeOutputPath(
-  inputPath: string,
-  inputFolder: string,
-  outputFolder: string | undefined,
-  projectRoot: string,
-  preserveStructure: boolean,
-  renameResult: { finalName: string },
-): string {
-  const fullInputFolder = resolve(projectRoot, inputFolder);
-  const relPath = relative(fullInputFolder, dirname(inputPath));
-
-  const outputBase = outputFolder
-    ? resolve(projectRoot, outputFolder)
-    : fullInputFolder;
-
-  if (preserveStructure && relPath && relPath !== ".") {
-    return resolve(outputBase, relPath, renameResult.finalName);
-  }
-
-  return resolve(outputBase, renameResult.finalName);
-}
-
-export function checkConflicts(
-  mappings: FileMapping[],
-  onConflict: "error" | "skip" | "overwrite" | "rename" = "error",
-): { mappings: FileMapping[]; hasConflicts: boolean } {
-  const outputMap = new Map<string, FileMapping[]>();
-
-  for (const mapping of mappings) {
-    const existing = outputMap.get(mapping.outputPath) || [];
-    existing.push(mapping);
-    outputMap.set(mapping.outputPath, existing);
-  }
-
-  const resolved: FileMapping[] = [];
-  let hasConflicts = false;
-
-  for (const [outputPath, group] of outputMap) {
-    if (group.length === 1 && group[0]) {
-      resolved.push(group[0]);
-    } else {
-      hasConflicts = true;
-
-      for (const mapping of group) {
-        if (onConflict === "error") {
-          resolved.push({
-            ...mapping,
-            status: "conflict",
-            error: `Conflict: multiple inputs map to ${outputPath}`,
-          });
-        } else if (onConflict === "skip") {
-          resolved.push({
-            ...mapping,
-            status: "skipped",
-          });
-        } else if (onConflict === "overwrite") {
-          resolved.push({
-            ...mapping,
-            status: "pending",
-          });
-        } else if (onConflict === "rename") {
-          const ext = mapping.outputPath.split(".").pop() || "";
-          const base = mapping.outputPath.replace(/\.[^.]+$/, "");
-          const counter = group.indexOf(mapping) + 1;
-          const newPath = `${base}_${String(counter).padStart(3, "0")}.${ext}`;
-          resolved.push({
-            ...mapping,
-            outputPath: newPath,
-            status: "pending",
-          });
-        }
-      }
-    }
-  }
-
-  return { mappings: resolved, hasConflicts };
+function validateInstances(instances: string[]): string[] {
+	return instances.filter((id) => id && id.trim() !== "");
 }
 
 export async function processBatch(
-  command: BarkCommand,
-  inputFiles: string[],
-  projectRoot: string,
-  // instances: RhinoInstance,
-  instances: string[],
-  options: {
-    outputFolder?: string;
-    dryRun?: boolean;
-    onConflict?: "error" | "skip" | "overwrite" | "rename";
-  } = {},
+	command: BarkCommand,
+	inputFiles: string[],
+	fileNames: string[],
+	instances: string[],
+	projectRoot: string,
 ): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
-  const {
-    inputFolder = ".",
-    outputFolder,
-    recursive = false,
-    preserveStructure = false,
-    onConflict = "error",
-    rhCommand,
-    rename: renameOptions,
-    timeout,
-    waitForCompletion,
-  } = command;
+	const { rhCommand } = command;
 
-  const mappings: FileMapping[] = [];
-  let counter = 1;
+	const mappings: FileMapping[] = inputFiles.map((inputPath, index) => ({
+		inputPath,
+		fileName: fileNames[index] || "unknown",
+		status: "pending" as const,
+	}));
 
-  for (const inputPath of inputFiles) {
-    const { name: origName, ext: origExt } = { name: inputPath.split("/").pop()?.replace(/\.[^.]+$/, "") || "", ext: inputPath.split(".").pop() || "" };
+	const finalMappings: FileMapping[] = [];
+	let succeeded = 0;
+	let failed = 0;
 
-    const renameResult = renameFile(inputPath, renameOptions, {
-      origName,
-      origExt,
-      counter,
-      now: new Date(),
-    });
+	const instanceBatches = new Map<string, FileMapping[]>();
 
-    const outputPath = computeOutputPath(
-      inputPath,
-      inputFolder,
-      outputFolder,
-      projectRoot,
-      preserveStructure,
-      renameResult,
-    );
+	const validInstanceIds = validateInstances(instances);
+	if (validInstanceIds.length === 0) {
+		throw new Error("No Rhino instances available");
+	}
+	displayDebug("processBatch", `valid instances: ${validInstanceIds.join(", ")}`);
+	validInstanceIds.forEach((id) => instanceBatches.set(id, []));
 
-    mappings.push({
-      inputPath,
-      outputPath: sanitizeFilename(outputPath),
-      status: "pending",
-    });
+	mappings.forEach((mapping, idx) => {
+		const instanceId = validInstanceIds[idx % validInstanceIds.length]!;
+		instanceBatches.get(instanceId)!.push(mapping);
+	});
 
-    counter++;
-  }
+	for (const [instanceId, batch] of instanceBatches) {
+		displayDebug("processBatch", `instance ${instanceId} gets ${batch.length} file(s)`);
+	}
 
-  const resolved = checkConflicts(mappings, onConflict).mappings;
-  const hasConflicts = resolved.some(m => m.status === "conflict");
+	displayDebug("processBatch", `starting parallel execution...`);
+	await Promise.all(
+		validInstanceIds.map(async (instanceId) => {
+			const batch = instanceBatches.get(instanceId) || [];
+			for (const mapping of batch) {
+				mapping.status = "processing";
+				try {
+					const result = await execute(
+						mapping.inputPath,
+						mapping.fileName,
+						command,
+						projectRoot,
+					);
+					if (result.success) {
+						mapping.status = "success";
+						succeeded++;
+					} else {
+						mapping.status = "failed";
+						mapping.error = result.error;
+						failed++;
+					}
+				} catch (e) {
+					mapping.status = "failed";
+					mapping.error = (e as Error).message;
+					failed++;
+				}
+				finalMappings.push(mapping);
+			}
+		}),
+	);
+	displayDebug("processBatch", "all instances finished processing");
+	await closeAll();
 
-  if (hasConflicts && onConflict === "error") {
-    const conflicts = resolved.filter((m) => m.status === "conflict");
-    for (const conflict of conflicts) {
-      displayConflict(`${conflict.inputPath} -> ${conflict.outputPath}`);
-    }
-    displayWarning(`\nAction on conflict: ${onConflict}`);
-    displayWarning("Dry run only. No files were processed.\n");
+	const summary: BatchSummary = {
+		total: inputFiles.length,
+		succeeded,
+		failed,
+		skipped: 0,
+	};
 
-    return {
-      mappings: resolved,
-      summary: { total: inputFiles.length, succeeded: 0, failed: 0, skipped: 0 },
-    };
-  }
+	return { mappings: finalMappings, summary };
+}
 
-  if (options.dryRun) {
-    displayInfo(`\nDry run. Would process ${resolved.length} files:\n`);
-    for (const mapping of resolved.slice(0, 10)) {
-      console.log(`  ${mapping.inputPath}`);
-      displayInfo(`    -> ${mapping.outputPath}`);
-    }
-    if (resolved.length > 10) {
-      displayInfo(`  ... and ${resolved.length - 10} more`);
-    }
-    displayWarning("\nDry run only. No files were processed.\n");
+export async function previewBatch(
+	command: BarkCommand,
+	inputFiles: string[],
+	fileNames: string[],
+	projectRoot: string,
+): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
+	displayInfo(`\nPreview. Would process ${inputFiles.length} files:\n`);
+	for (const inputPath of inputFiles) {
+		displayInfo(`Running Command: ${command.name}`);
+		displayDebug("previewBatch", `> ${command.rhCommand}`);
+		console.log(`  ${inputPath}`);
+	}
+	displayWarning("\nPreview only. No files were processed.\n");
 
-    return {
-      mappings: resolved,
-      summary: { total: inputFiles.length, succeeded: 0, failed: 0, skipped: 0 },
-    };
-  }
+	const mappings = inputFiles.map((inputPath, index) => ({
+		inputPath,
+		fileName: fileNames[index] || "unknown",
+		outputPath: inputPath,
+		status: "pending" as const,
+	}));
 
-  const finalMappings: FileMapping[] = [];
-  let succeeded = 0;
-  let failed = 0;
-  let skipped = 0;
-
-  const outputDir = outputFolder ? resolve(projectRoot, outputFolder) : null;
-  if (outputDir && !existsSync(outputDir)) {
-    mkdirSync(outputDir, { recursive: true });
-  }
-
-  for (const mapping of resolved) {
-    if (mapping.status === "skipped") {
-      skipped++;
-      finalMappings.push(mapping);
-      continue;
-    }
-
-    mapping.status = "processing";
-
-    try {
-      const result = await executeOnFile(
-        instance,
-        rhCommand,
-        mapping.inputPath,
-        mapping.outputPath,
-        { timeout, waitForCompletion },
-      );
-
-      if (result.success) {
-        mapping.status = "success";
-        succeeded++;
-      } else {
-        mapping.status = "failed";
-        mapping.error = result.error;
-        failed++;
-      }
-    } catch (e) {
-      mapping.status = "failed";
-      mapping.error = (e as Error).message;
-      failed++;
-    }
-
-    finalMappings.push(mapping);
-  }
-
-  const summary: BatchSummary = {
-    total: inputFiles.length,
-    succeeded,
-    failed,
-    skipped,
-  };
-
-  return { mappings: finalMappings, summary };
+	return {
+		mappings,
+		summary: { total: inputFiles.length, succeeded: 0, failed: 0, skipped: 0 },
+	};
 }
 
 export function printBatchSummary(summary: BatchSummary): void {
-  displayBold("\n=== Batch Summary ===");
-  displayTotal(`Total:    ${summary.total}`);
-  displaySucceeded(`Succeeded: ${summary.succeeded}`);
-  if (summary.failed > 0) {
-    displayFailed(`Failed:   ${summary.failed}`);
-  }
-  if (summary.skipped > 0) {
-    displayWarning(`Skipped:  ${summary.skipped}`);
-  }
+	displayBold("\n=== Batch Summary ===");
+	displayTotal(`Total:    ${summary.total}`);
+	displaySucceeded(`Succeeded: ${summary.succeeded}`);
+	if (summary.failed > 0) {
+		displayFailed(`Failed:   ${summary.failed}`);
+	}
+	if (summary.skipped > 0) {
+		displayWarning(`Skipped:  ${summary.skipped}`);
+	}
 }
