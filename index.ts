@@ -2,9 +2,8 @@
 
 import { Command } from "commander";
 import { logo } from "./src/logo";
-import { start } from "./src/commands/start";
+import { startRun } from "./src/commands/start";
 import { init } from "./src/commands/init";
-import { run } from "./src/commands/run";
 
 async function main() {
   logo();
@@ -17,20 +16,27 @@ async function main() {
     .version("1.0.0");
 
   program
-    .command("start")
-    .description("Launch Rhino 8")
+    .command("run")
+    .description("Launch Rhino 8 with interactive menu (or run a specific command)")
+    .argument("[command-id]", "Command ID to run immediately")
     .option("-s, --spawn <count>", "Number of Rhino instances to start", "1")
-    .action((options) => start(parseInt(options.spawn)));
+    .option("-c, --config <path>", "Config file path")
+    .option("-d, --dry-run", "Preview without executing")
+    .action(async (commandId, options) => {
+      await startRun({
+        spawn: Number(options.spawn) || 1,
+        config: options.config,
+        command: commandId,
+        dryRun: options.dryRun,
+      });
+    });
 
   program
     .command("init")
     .description("Initialize a new project")
-    .action(init);
-
-  program
-    .command("run")
-    .description("Run a script")
-    .action(run);
+    .option("-p, --path <path>", "Target directory")
+    .option("-f, --force", "Overwrite existing config")
+    .action((options) => init({ path: options.path, force: options.force }));
 
   program.parse(process.argv);
 }
