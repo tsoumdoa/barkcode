@@ -1,7 +1,8 @@
+import chalk from "chalk";
 import { spawn } from "child_process";
 import type { RhinoInstance, CommandResult, ExecuteOptions } from "../types";
 import { DEFAULT_TIMEOUT } from "../constants";
-import { displayInfo } from "./logger";
+import { displayInfo, displayDebug } from "./logger";
 
 export async function connect(): Promise<RhinoInstance> {
   const proc = spawn("rhinocode", ["list"], {
@@ -30,7 +31,7 @@ export async function connect(): Promise<RhinoInstance> {
 }
 
 export async function execute(
-  instance: RhinoInstance,
+  instanceId: string,
   command: string,
   options: ExecuteOptions = {},
 ): Promise<CommandResult> {
@@ -40,13 +41,13 @@ export async function execute(
   const startTime = Date.now();
 
   return new Promise((resolve) => {
-    const args = waitForCompletion
-      ? ["exec", instance.id, command]
-      : ["send", instance.id, command];
+    const action = waitForCompletion ? "exec" : "send";
+    const fullArgs = [action, instanceId, command];
+	displayDebug("rhinocode", `spawn: rhinocode ${fullArgs.join(" ")}`);
+	displayDebug("rhinocode", `command string: "${command}"`);
 
-    const proc = spawn("rhinocode", args, {
+    const proc = spawn("rhinocode", fullArgs, {
       stdio: "pipe",
-      shell: true,
     });
 
     let stdout = "";
@@ -62,6 +63,7 @@ export async function execute(
 
     const timeoutId = setTimeout(() => {
       proc.kill();
+	displayDebug("rhinocode", `timed out after ${timeout}ms`);
       resolve({
         success: false,
         output: stdout,
@@ -74,6 +76,10 @@ export async function execute(
       clearTimeout(timeoutId);
       const duration = Date.now() - startTime;
 
+	displayDebug("rhinocode", `exit code: ${code}, duration: ${duration}ms`);
+	if (stdout) displayDebug("rhinocode", `stdout: ${stdout}`);
+	if (stderr) displayDebug("rhinocode", `stderr: ${stderr}`);
+
       resolve({
         success: code === 0,
         output: stdout,
@@ -85,23 +91,29 @@ export async function execute(
 }
 
 export async function executeOnFile(
-  instance: RhinoInstance,
+  instanceId: string,
   command: string,
   filePath: string,
   outputPath?: string,
+  outputFormat?: string,
   options: ExecuteOptions = {},
 ): Promise<CommandResult> {
   let fullCommand = command;
   if (outputPath) {
     fullCommand += ` "${outputPath}"`;
   }
+  if (outputFormat) {
+    fullCommand += ` "${outputFormat}"`;
+  }
   fullCommand += ` "${filePath}"`;
 
-  return execute(instance, fullCommand, options);
+	displayDebug("executeOnFile", `fullCommand: ${fullCommand}`);
+
+  return execute(instanceId, fullCommand, options);
 }
 
-export async function disconnect(instance: RhinoInstance): Promise<void> {
-  displayInfo(`  Disconnected from Rhino ${instance.id}`);
+export async function disconnect(instanceId: string): Promise<void> {
+  displayInfo(`  Disconnected from Rhino ${instanceId}`);
 }
 
 export async function isRhinocodeAvailable(): Promise<boolean> {

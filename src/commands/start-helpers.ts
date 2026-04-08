@@ -1,6 +1,7 @@
 import { getCommand, loadConfig } from "../lib/config";
-import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
-import { displaySuccess, displayError, displayWarning, displayInfo, displayBold } from "../lib/logger";
+import { collectFiles, printBatchSummary, processBatch, previewBatch } from "../lib/batch";
+import chalk from "chalk";
+import { displaySuccess, displayError, displayWarning, displayInfo, displayBold, displayDebug } from "../lib/logger";
 import { createRhinoRunner } from "../lib/rhino";
 import { BarkcodeConfig } from "../types";
 import { platform } from "os";
@@ -58,10 +59,16 @@ export async function executeCommandIfRequested(
 	const command = getCommand(config, commandName);
 
 	displayBold(`Running: ${command.name}`);
+	displayDebug("executeCommandIfRequested", `command id: ${command.id}`);
+	displayDebug("executeCommandIfRequested", `rhCommand: ${command.rhCommand}`);
 
 	const inputPattern = command.inputPattern || "*.3dm";
 	const inputFolder = command.inputFolder || ".";
 	const isRecursive = command.recursive ?? false;
+
+	displayDebug("executeCommandIfRequested", `inputFolder: ${inputFolder}`);
+	displayDebug("executeCommandIfRequested", `inputPattern: ${inputPattern}`);
+	displayDebug("executeCommandIfRequested", `recursive: ${isRecursive}`);
 
 	const files = await collectFiles(inputFolder, inputPattern, isRecursive, projectRoot);
 
@@ -72,18 +79,23 @@ export async function executeCommandIfRequested(
 
 	displayInfo(`Found ${files.length} file(s)\n`);
 
-	await rhinoRunner.runCommand({
-		command,
-		files,
-		inputFolder,
-		inputPattern,
-		isRecursive,
-		isDryRun,
-	});
+	if (isDryRun) {
+		await rhinoRunner.displayDryRunInfo({
+			command,
+			files,
+			inputFolder,
+			inputPattern,
+			isRecursive,
+		});
+		await previewBatch(command, files, projectRoot, {
+			outputFolder: command.outputFolder,
+			onConflict: command.onConflict || "error",
+		});
+		return;
+	}
 
 	const { summary } = await processBatch(command, files, projectRoot, instances, {
 		outputFolder: command.outputFolder,
-		dryRun: false,
 		onConflict: command.onConflict || "error",
 	});
 

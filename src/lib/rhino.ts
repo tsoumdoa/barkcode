@@ -79,32 +79,28 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 		},
 		waitForRhinoInstances,
 
-		async runCommand(options: {
+		async displayDryRunInfo(options: {
 			command: { name: string; rhCommand: string; outputFolder?: string; inputMode?: string; onConflict?: string };
 			files: string[];
 			inputFolder: string;
 			inputPattern: string;
 			isRecursive: boolean;
-			isDryRun: boolean;
 		}): Promise<void> {
-			const { command, files, inputFolder, inputPattern, isRecursive, isDryRun } = options;
+			const { command, files, inputFolder, inputPattern, isRecursive } = options;
 
-			if (isDryRun) {
-				displayWarning("=== DRY RUN MODE ===\n");
-				displayInfo("Command: " + command.rhCommand);
-				displayInfo("Input: " + `${inputFolder}/${inputPattern}`);
-				displayInfo("Output: " + (command.outputFolder || "(default)"));
-				displayInfo("Recursive: " + String(isRecursive));
-				displayInfo("Mode: " + (command.inputMode || "batch"));
-				console.log();
-				displaySuccess("Files that would be processed:");
-				files.forEach((file) => {
-					displayInfo("  - " + file);
-				});
-				console.log();
-				displayWarning("Dry run complete. No changes made.");
-				return;
-			}
+			displayWarning("=== DRY RUN MODE ===\n");
+			displayInfo("Command: " + command.rhCommand);
+			displayInfo("Input: " + `${inputFolder}/${inputPattern}`);
+			displayInfo("Output: " + (command.outputFolder || "(default)"));
+			displayInfo("Recursive: " + String(isRecursive));
+			displayInfo("Mode: " + (command.inputMode || "batch"));
+			console.log();
+			displaySuccess("Files that would be processed:");
+			files.forEach((file) => {
+				displayInfo("  - " + file);
+			});
+			console.log();
+			displayWarning("Dry run complete. No changes made.");
 		},
 	};
 }

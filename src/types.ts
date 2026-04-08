@@ -85,7 +85,6 @@ export type BatchOptions = {
   recursive: boolean;
   preserveStructure?: boolean;
   parallel?: number;
-  dryRun?: boolean;
 };
 
 export type BatchSummary = {
@@ -106,3 +105,7 @@ export type ConfigLoadOptions = {
   cwd?: string;
   configPath?: string;
 };
+
+export type MenuAction =
+  | { type: "exit" }
+  | { type: "run"; command: BarkCommand; files: string[] };

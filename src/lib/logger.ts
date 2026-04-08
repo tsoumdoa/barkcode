@@ -39,3 +39,7 @@ export function displaySucceeded(message: string) {
 export function displayTotal(message: string) {
 	console.log(chalk.white(message));
 }
+
+export function displayDebug(context: string, message: string) {
+	console.log(chalk.gray(`[${context}] ${message}`));
+}
