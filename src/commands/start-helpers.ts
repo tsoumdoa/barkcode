@@ -1,6 +1,5 @@
 import { getCommand, loadConfig } from "../lib/config";
 import { collectFiles, printBatchSummary, processBatch, previewBatch } from "../lib/batch";
-import chalk from "chalk";
 import { displaySuccess, displayError, displayWarning, displayInfo, displayBold, displayDebug } from "../lib/logger";
 import { createRhinoRunner } from "../lib/rhino";
 import { BarkcodeConfig } from "../types";
@@ -64,13 +63,11 @@ export async function executeCommandIfRequested(
 
 	const inputPattern = command.inputPattern || "*.3dm";
 	const inputFolder = command.inputFolder || ".";
-	const isRecursive = command.recursive ?? false;
 
 	displayDebug("executeCommandIfRequested", `inputFolder: ${inputFolder}`);
 	displayDebug("executeCommandIfRequested", `inputPattern: ${inputPattern}`);
-	displayDebug("executeCommandIfRequested", `recursive: ${isRecursive}`);
 
-	const files = await collectFiles(inputFolder, inputPattern, isRecursive, projectRoot);
+	const files = await collectFiles(inputFolder, inputPattern, projectRoot);
 
 	if (files.length === 0 && !isDryRun) {
 		displayWarning(`No files found matching ${inputPattern}`);
@@ -80,22 +77,11 @@ export async function executeCommandIfRequested(
 	displayInfo(`Found ${files.length} file(s)\n`);
 
 	if (isDryRun) {
-		await rhinoRunner.displayDryRunInfo({
-			command,
-			files,
-			inputFolder,
-			inputPattern,
-			isRecursive,
-		});
-		await previewBatch(command, files, projectRoot, {
-			outputFolder: command.outputFolder,
-		});
+		await previewBatch(command, files);
 		return;
 	}
 
-	const { summary } = await processBatch(command, files, projectRoot, instances, {
-		outputFolder: command.outputFolder,
-	});
+	const { summary } = await processBatch(command, files, instances);
 
 	printBatchSummary(summary);
 }

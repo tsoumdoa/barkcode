@@ -5,15 +5,8 @@ export const BarkCommandSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   rhCommand: z.string(),
-  scriptPath: z.string().optional(),
-  waitForCompletion: z.boolean().optional(),
-  timeout: z.number().optional(),
   inputPattern: z.string().optional(),
   inputFolder: z.string().optional(),
-  recursive: z.boolean().optional(),
-  requiredFiles: z.array(z.string()).optional(),
-  outputFolder: z.string().optional(),
-  outputFormat: z.string().optional(),
 });
 
 export const BarkcodeConfigSchema = z.object({

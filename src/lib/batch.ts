@@ -1,7 +1,6 @@
 import { glob } from "glob";
 import chalk from "chalk";
 import { resolve, join } from "path";
-import { existsSync, mkdirSync } from "fs";
 import type { BatchSummary, FileMapping, BarkCommand } from "../types";
 import { executeOnFile } from "./rhinocode";
 import { displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug } from "./logger";
@@ -9,19 +8,13 @@ import { displayWarning, displayInfo, displayBold, displayTotal, displaySucceede
 export async function collectFiles(
 	inputFolder: string,
 	pattern: string,
-	recursive: boolean,
 	projectRoot: string,
 ): Promise<string[]> {
 	const fullInputPath = resolve(projectRoot, inputFolder);
-	const globPattern = recursive
-		? join(fullInputPath, "**", pattern)
-		: join(fullInputPath, pattern);
+	const globPattern = join(fullInputPath, "**", pattern);
 
-	displayDebug("collectFiles", `globbing...`);
 	displayDebug("collectFiles", `inputFolder: ${inputFolder}`);
-	displayDebug("collectFiles", `fullInputPath: ${fullInputPath}`);
 	displayDebug("collectFiles", `globPattern: ${globPattern}`);
-	displayDebug("collectFiles", `recursive: ${recursive}`);
 
 	const files = await glob(globPattern, {
 		nodir: true,
@@ -29,9 +22,6 @@ export async function collectFiles(
 	});
 
 	displayDebug("collectFiles", `found ${files.length} file(s)`);
-	if (files.length > 0) {
-		files.forEach((f) => displayDebug("collectFiles", `  ${f}`));
-	}
 
 	return files;
 }
@@ -39,35 +29,19 @@ export async function collectFiles(
 export async function processBatch(
 	command: BarkCommand,
 	inputFiles: string[],
-	projectRoot: string,
 	instances: string[],
-	options: {
-		outputFolder?: string;
-	} = {},
 ): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
-	const { rhCommand, timeout, waitForCompletion } = command;
+	const { rhCommand } = command;
 
-	const mappings: FileMapping[] = [];
-	for (const inputPath of inputFiles) {
-		let outputPath = inputPath;
-		if (options.outputFolder) {
-			outputPath = resolve(projectRoot, options.outputFolder, inputPath.split("/").pop()!);
-		}
-		mappings.push({
-			inputPath,
-			outputPath,
-			status: "pending",
-		});
-	}
+	const mappings: FileMapping[] = inputFiles.map((inputPath) => ({
+		inputPath,
+		outputPath: inputPath,
+		status: "pending" as const,
+	}));
 
 	const finalMappings: FileMapping[] = [];
 	let succeeded = 0;
 	let failed = 0;
-
-	const outputDir = options.outputFolder ? resolve(projectRoot, options.outputFolder) : null;
-	if (outputDir && !existsSync(outputDir)) {
-		mkdirSync(outputDir, { recursive: true });
-	}
 
 	const instanceBatches = new Map<string, FileMapping[]>();
 	const validInstanceIds = instances.filter((id) => id && id.trim() !== "");
@@ -97,9 +71,6 @@ export async function processBatch(
 						instanceId,
 						rhCommand,
 						mapping.inputPath,
-						mapping.outputPath,
-						command.outputFormat,
-						{ timeout, waitForCompletion },
 					);
 					if (result.success) {
 						mapping.status = "success";
@@ -129,44 +100,29 @@ export async function processBatch(
 	return { mappings: finalMappings, summary };
 }
 
-async function computeBatchMappings(
+export async function previewBatch(
 	command: BarkCommand,
 	inputFiles: string[],
-	projectRoot: string,
-	options: {
-		outputFolder?: string;
-		dryRun?: boolean;
-	},
-): Promise<{
-	mappings: FileMapping[];
-}> {
-	const mappings: FileMapping[] = [];
-
-	for (const inputPath of inputFiles) {
-		let outputPath = inputPath;
-		if (options.outputFolder) {
-			outputPath = resolve(projectRoot, options.outputFolder, inputPath.split("/").pop()!);
-		}
-		mappings.push({
-			inputPath,
-			outputPath,
-			status: "pending",
-		});
+): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
+	displayInfo(`\nPreview. Would process ${inputFiles.length} files:\n`);
+	for (const inputPath of inputFiles.slice(0, 10)) {
+		console.log(`  ${inputPath}`);
 	}
-
-	if (options.dryRun) {
-		displayInfo(`\nPreview. Would process ${mappings.length} files:\n`);
-		for (const mapping of mappings.slice(0, 10)) {
-			console.log(`  ${mapping.inputPath}`);
-			displayInfo(`    -> ${mapping.outputPath}`);
-		}
-		if (mappings.length > 10) {
-			displayInfo(`  ... and ${mappings.length - 10} more`);
-		}
-		displayWarning("\nPreview only. No files were processed.\n");
+	if (inputFiles.length > 10) {
+		displayInfo(`  ... and ${inputFiles.length - 10} more`);
 	}
+	displayWarning("\nPreview only. No files were processed.\n");
 
-	return { mappings };
+	const mappings = inputFiles.map((inputPath) => ({
+		inputPath,
+		outputPath: inputPath,
+		status: "pending" as const,
+	}));
+
+	return {
+		mappings,
+		summary: { total: inputFiles.length, succeeded: 0, failed: 0, skipped: 0 },
+	};
 }
 
 export function printBatchSummary(summary: BatchSummary): void {
@@ -179,25 +135,4 @@ export function printBatchSummary(summary: BatchSummary): void {
 	if (summary.skipped > 0) {
 		displayWarning(`Skipped:  ${summary.skipped}`);
 	}
-}
-
-export async function previewBatch(
-	command: BarkCommand,
-	inputFiles: string[],
-	projectRoot: string,
-	options: {
-		outputFolder?: string;
-	} = {},
-): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
-	const { mappings } = await computeBatchMappings(
-		command,
-		inputFiles,
-		projectRoot,
-		{ ...options, dryRun: true },
-	);
-
-	return {
-		mappings,
-		summary: { total: inputFiles.length, succeeded: 0, failed: 0, skipped: 0 },
-	};
 }

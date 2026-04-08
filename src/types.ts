@@ -8,15 +8,8 @@ export type BarkCommand = {
   name: string;
   description?: string;
   rhCommand: string;
-  scriptPath?: string;
-  waitForCompletion?: boolean;
-  timeout?: number;
   inputPattern?: string;
   inputFolder?: string;
-  recursive?: boolean;
-  requiredFiles?: string[];
-  outputFolder?: string;
-  outputFormat?: string;
 };
 
 export type LoadedConfig = {
@@ -31,7 +24,6 @@ export type RhinoInstance = {
 };
 
 export type ExecuteOptions = {
-  timeout?: number;
   waitForCompletion?: boolean;
 };
 
@@ -40,14 +32,6 @@ export type CommandResult = {
   output?: string;
   error?: string;
   durationMs?: number;
-};
-
-export type BatchOptions = {
-  inputFolder: string;
-  outputFolder?: string;
-  pattern: string;
-  recursive: boolean;
-  parallel?: number;
 };
 
 export type BatchSummary = {

@@ -2,17 +2,8 @@ import { createRhinoRunner } from "../lib/rhino";
 import { RHINO_PATH } from "../constants";
 import { showCommandMenu } from "../lib/menu";
 import { processBatch, previewBatch, printBatchSummary } from "../lib/batch";
-import {
-  displaySuccess,
-  displayWarning,
-  displayInfo,
-  displayBold,
-} from "../lib/logger";
-import {
-  loadConfigOrExit,
-  ensureRhinoInstances,
-  executeCommandIfRequested,
-} from "./start-helpers";
+import { displaySuccess, displayWarning, displayInfo, displayBold } from "../lib/logger";
+import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./start-helpers";
 
 export async function startRun(
   options: {
@@ -42,21 +33,10 @@ export async function startRun(
   displaySuccess(`Config loaded from ${loadedConfig.configPath}`);
   displayInfo(`  Project root: ${projectRoot}\n`);
 
-  const instances = await ensureRhinoInstances(
-    rhinoRunner,
-    spawnCount,
-    isDryRun,
-  );
+  const instances = await ensureRhinoInstances(rhinoRunner, spawnCount, isDryRun);
 
   if (commandName) {
-    await executeCommandIfRequested(
-      rhinoRunner,
-      commandName,
-      config,
-      projectRoot,
-      instances,
-      isDryRun,
-    );
+    await executeCommandIfRequested(rhinoRunner, commandName, config, projectRoot, instances, isDryRun);
   }
 
   displayInfo("\nPress Ctrl+C to exit\n");
@@ -68,26 +48,18 @@ export async function startRun(
 
     if (action.type === "run") {
       displayBold(`\nRunning: ${action.command.name}`);
-      displayInfo(
-        `  Input: ${action.command.inputFolder || "."}/${action.command.inputPattern || "*.3dm}"}`,
-      );
+      displayInfo(`  Input: ${action.command.inputFolder || "."}/${action.command.inputPattern || "*.3dm"}`);
 
       if (action.files.length === 0) {
-        displayWarning(
-          `  No files found matching ${action.command.inputPattern || "*.3dm"}`,
-        );
+        displayWarning(`  No files found matching ${action.command.inputPattern || "*.3dm"}`);
         continue;
       }
 
       displayInfo(`  Found ${action.files.length} file(s)`);
 
       const { summary } = isDryRun
-        ? await previewBatch(action.command, action.files, projectRoot, {
-            outputFolder: action.command.outputFolder,
-          })
-        : await processBatch(action.command, action.files, projectRoot, instances, {
-            outputFolder: action.command.outputFolder,
-          });
+        ? await previewBatch(action.command, action.files)
+        : await processBatch(action.command, action.files, instances);
 
       printBatchSummary(summary);
     }

@@ -35,7 +35,7 @@ export async function execute(
   command: string,
   options: ExecuteOptions = {},
 ): Promise<CommandResult> {
-  const timeout = (options.timeout || DEFAULT_TIMEOUT) * 1000;
+  const timeout = DEFAULT_TIMEOUT * 1000;
   const waitForCompletion = options.waitForCompletion ?? true;
 
   const startTime = Date.now();
@@ -94,22 +94,12 @@ export async function executeOnFile(
   instanceId: string,
   command: string,
   filePath: string,
-  outputPath?: string,
-  outputFormat?: string,
-  options: ExecuteOptions = {},
 ): Promise<CommandResult> {
-  let fullCommand = command;
-  if (outputPath) {
-    fullCommand += ` "${outputPath}"`;
-  }
-  if (outputFormat) {
-    fullCommand += ` "${outputFormat}"`;
-  }
-  fullCommand += ` "${filePath}"`;
+  const fullCommand = `${command} "${filePath}"`;
 
 	displayDebug("executeOnFile", `fullCommand: ${fullCommand}`);
 
-  return execute(instanceId, fullCommand, options);
+  return execute(instanceId, fullCommand);
 }
 
 export async function disconnect(instanceId: string): Promise<void> {

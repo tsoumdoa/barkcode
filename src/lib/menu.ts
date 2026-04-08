@@ -40,9 +40,8 @@ export async function showCommandMenu(
     if (command) {
       const inputPattern = command.inputPattern || "*.3dm";
       const inputFolder = command.inputFolder || ".";
-      const isRecursive = command.recursive ?? false;
 
-      const files = await collectFiles(inputFolder, inputPattern, isRecursive, projectRoot);
+      const files = await collectFiles(inputFolder, inputPattern, projectRoot);
       return { type: "run", command, files };
     }
 
