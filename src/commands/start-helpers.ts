@@ -89,14 +89,12 @@ export async function executeCommandIfRequested(
 		});
 		await previewBatch(command, files, projectRoot, {
 			outputFolder: command.outputFolder,
-			onConflict: command.onConflict || "error",
 		});
 		return;
 	}
 
 	const { summary } = await processBatch(command, files, projectRoot, instances, {
 		outputFolder: command.outputFolder,
-		onConflict: command.onConflict || "error",
 	});
 
 	printBatchSummary(summary);

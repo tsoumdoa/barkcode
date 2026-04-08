@@ -1,73 +1,5 @@
 import { z } from "zod";
 
-const StripExtensionRuleSchema = z.object({
-  type: z.literal("stripExtension"),
-});
-
-const TrimRuleSchema = z.object({
-  type: z.literal("trim"),
-});
-
-const LowercaseRuleSchema = z.object({
-  type: z.literal("lowercase"),
-});
-
-const UppercaseRuleSchema = z.object({
-  type: z.literal("uppercase"),
-});
-
-const ReplaceRuleSchema = z.object({
-  type: z.literal("replace"),
-  find: z.string(),
-  replace: z.string(),
-  all: z.boolean().optional(),
-});
-
-const RegexRuleSchema = z.object({
-  type: z.literal("regex"),
-  find: z.string(),
-  replace: z.string(),
-  flags: z.string().optional(),
-});
-
-const RemoveDigitsRuleSchema = z.object({
-  type: z.literal("removeDigits"),
-  position: z.enum(["start", "end", "all"]).optional(),
-});
-
-const PadDigitsRuleSchema = z.object({
-  type: z.literal("padDigits"),
-  position: z.enum(["start", "end"]),
-  length: z.number().positive(),
-  char: z.string().optional(),
-});
-
-const SliceRuleSchema = z.object({
-  type: z.literal("slice"),
-  start: z.number().optional(),
-  end: z.number().optional(),
-});
-
-const RenameRuleSchema = z.discriminatedUnion("type", [
-  StripExtensionRuleSchema,
-  TrimRuleSchema,
-  LowercaseRuleSchema,
-  UppercaseRuleSchema,
-  ReplaceRuleSchema,
-  RegexRuleSchema,
-  RemoveDigitsRuleSchema,
-  PadDigitsRuleSchema,
-  SliceRuleSchema,
-]);
-
-export const RenameOptionsSchema = z.object({
-  rules: z.array(RenameRuleSchema).optional(),
-  template: z.string().optional(),
-  targetExtension: z.string().optional(),
-  counterStart: z.number().optional(),
-  counterPad: z.number().optional(),
-});
-
 export const BarkCommandSchema = z.object({
   id: z.string().optional(),
   name: z.string(),
@@ -76,16 +8,12 @@ export const BarkCommandSchema = z.object({
   scriptPath: z.string().optional(),
   waitForCompletion: z.boolean().optional(),
   timeout: z.number().optional(),
-  inputMode: z.enum(["single", "batch"]).optional(),
   inputPattern: z.string().optional(),
   inputFolder: z.string().optional(),
   recursive: z.boolean().optional(),
   requiredFiles: z.array(z.string()).optional(),
   outputFolder: z.string().optional(),
   outputFormat: z.string().optional(),
-  preserveStructure: z.boolean().optional(),
-  onConflict: z.enum(["error", "skip", "overwrite", "rename"]).optional(),
-  rename: RenameOptionsSchema.optional(),
 });
 
 export const BarkcodeConfigSchema = z.object({

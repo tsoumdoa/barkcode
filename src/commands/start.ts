@@ -84,11 +84,9 @@ export async function startRun(
       const { summary } = isDryRun
         ? await previewBatch(action.command, action.files, projectRoot, {
             outputFolder: action.command.outputFolder,
-            onConflict: action.command.onConflict || "error",
           })
         : await processBatch(action.command, action.files, projectRoot, instances, {
             outputFolder: action.command.outputFolder,
-            onConflict: action.command.onConflict || "error",
           });
 
       printBatchSummary(summary);
