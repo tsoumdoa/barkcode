@@ -2,7 +2,7 @@ import { glob } from "glob";
 import chalk from "chalk";
 import { resolve, join } from "path";
 import type { BatchSummary, FileMapping, BarkCommand } from "../types";
-import { executeOnFile } from "./rhinocode";
+import { execute } from "./rhinocode";
 import { displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug } from "./logger";
 
 export async function collectFiles(
@@ -25,17 +25,22 @@ export async function collectFiles(
 
 	return files;
 }
+function validateInstances(instances: string[]): string[] {
+	return instances.filter((id) => id && id.trim() !== "");
+}
 
 export async function processBatch(
 	command: BarkCommand,
 	inputFiles: string[],
+	fileNames: string[],
 	instances: string[],
+	projectRoot: string,
 ): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
 	const { rhCommand } = command;
 
-	const mappings: FileMapping[] = inputFiles.map((inputPath) => ({
+	const mappings: FileMapping[] = inputFiles.map((inputPath, index) => ({
 		inputPath,
-		outputPath: inputPath,
+		fileName: fileNames[index] || "unknown",
 		status: "pending" as const,
 	}));
 
@@ -44,7 +49,8 @@ export async function processBatch(
 	let failed = 0;
 
 	const instanceBatches = new Map<string, FileMapping[]>();
-	const validInstanceIds = instances.filter((id) => id && id.trim() !== "");
+
+	const validInstanceIds = validateInstances(instances);
 	if (validInstanceIds.length === 0) {
 		throw new Error("No Rhino instances available");
 	}
@@ -67,10 +73,11 @@ export async function processBatch(
 			for (const mapping of batch) {
 				mapping.status = "processing";
 				try {
-					const result = await executeOnFile(
-						instanceId,
-						rhCommand,
+					const result = await execute(
 						mapping.inputPath,
+						mapping.fileName,
+						rhCommand,
+						projectRoot,
 					);
 					if (result.success) {
 						mapping.status = "success";
@@ -103,18 +110,20 @@ export async function processBatch(
 export async function previewBatch(
 	command: BarkCommand,
 	inputFiles: string[],
+	fileNames: string[],
+	projectRoot: string,
 ): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
 	displayInfo(`\nPreview. Would process ${inputFiles.length} files:\n`);
-	for (const inputPath of inputFiles.slice(0, 10)) {
+	for (const inputPath of inputFiles) {
+		displayInfo(`Running Command: ${command.name}`);
+		displayDebug("previewBatch", `> ${command.rhCommand}`);
 		console.log(`  ${inputPath}`);
-	}
-	if (inputFiles.length > 10) {
-		displayInfo(`  ... and ${inputFiles.length - 10} more`);
 	}
 	displayWarning("\nPreview only. No files were processed.\n");
 
-	const mappings = inputFiles.map((inputPath) => ({
+	const mappings = inputFiles.map((inputPath, index) => ({
 		inputPath,
+		fileName: fileNames[index] || "unknown",
 		outputPath: inputPath,
 		status: "pending" as const,
 	}));

@@ -1,6 +1,18 @@
 import { getCommand, loadConfig } from "../lib/config";
-import { collectFiles, printBatchSummary, processBatch, previewBatch } from "../lib/batch";
-import { displaySuccess, displayError, displayWarning, displayInfo, displayBold, displayDebug } from "../lib/logger";
+import {
+	collectFiles,
+	printBatchSummary,
+	processBatch,
+	previewBatch,
+} from "../lib/batch";
+import {
+	displaySuccess,
+	displayError,
+	displayWarning,
+	displayInfo,
+	displayBold,
+	displayDebug,
+} from "../lib/logger";
 import { createRhinoRunner } from "../lib/rhino";
 import { BarkcodeConfig } from "../types";
 import { platform } from "os";
@@ -24,7 +36,9 @@ export async function ensureRhinoInstances(
 	isDryRun: boolean,
 ) {
 	if (platform() === "darwin" && spawnCount > 1) {
-		displayWarning("On Mac, Rhino only allows one instance. Using --spawn=1.\n");
+		displayWarning(
+			"On Mac, Rhino only allows one instance. Using --spawn=1.\n",
+		);
 		spawnCount = 1;
 	}
 
@@ -32,7 +46,9 @@ export async function ensureRhinoInstances(
 
 	if (!isDryRun && instances.length < spawnCount) {
 		if (platform() === "darwin") {
-			displayWarning(`On Mac, please manually open ${spawnCount} Rhino instance(s) and run the _StartScriptServer command in each.\n`);
+			displayWarning(
+				`On Mac, please manually open ${spawnCount} Rhino instance(s) and run the _StartScriptServer command in each.\n`,
+			);
 			displayInfo("Waiting for user to start Rhino instances...\n");
 		} else {
 			displayInfo("Launching Rhino 8...");
@@ -48,7 +64,7 @@ export async function ensureRhinoInstances(
 }
 
 export async function executeCommandIfRequested(
-	rhinoRunner: ReturnType<typeof createRhinoRunner>,
+	// rhinoRunner: ReturnType<typeof createRhinoRunner>,
 	commandName: string,
 	config: BarkcodeConfig,
 	projectRoot: string,
@@ -61,13 +77,18 @@ export async function executeCommandIfRequested(
 	displayDebug("executeCommandIfRequested", `command id: ${command.id}`);
 	displayDebug("executeCommandIfRequested", `rhCommand: ${command.rhCommand}`);
 
-	const inputPattern = command.inputPattern || "*.3dm";
-	const inputFolder = command.inputFolder || ".";
+	const inputPattern = command.inputPattern;
+	const inputFolder = command.inputFolder;
 
 	displayDebug("executeCommandIfRequested", `inputFolder: ${inputFolder}`);
 	displayDebug("executeCommandIfRequested", `inputPattern: ${inputPattern}`);
 
 	const files = await collectFiles(inputFolder, inputPattern, projectRoot);
+	const fileNames = files.map((file) => {
+		const fullPath = file.replace(projectRoot, "");
+		const fileName = fullPath.split("/").pop() || fullPath;
+		return fileName.replace(/\.[^/.]+$/, "");
+	});
 
 	if (files.length === 0 && !isDryRun) {
 		displayWarning(`No files found matching ${inputPattern}`);
@@ -77,11 +98,17 @@ export async function executeCommandIfRequested(
 	displayInfo(`Found ${files.length} file(s)\n`);
 
 	if (isDryRun) {
-		await previewBatch(command, files);
+		await previewBatch(command, files, fileNames, projectRoot);
 		return;
 	}
 
-	const { summary } = await processBatch(command, files, instances);
+	const { summary } = await processBatch(
+		command,
+		files,
+		fileNames,
+		instances,
+		projectRoot,
+	);
 
 	printBatchSummary(summary);
 }

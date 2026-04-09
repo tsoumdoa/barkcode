@@ -8,8 +8,8 @@ export type BarkCommand = {
   name: string;
   description?: string;
   rhCommand: string;
-  inputPattern?: string;
-  inputFolder?: string;
+  inputPattern: string;
+  inputFolder: string;
 };
 
 export type LoadedConfig = {
@@ -23,9 +23,6 @@ export type RhinoInstance = {
   connected: boolean;
 };
 
-export type ExecuteOptions = {
-  waitForCompletion?: boolean;
-};
 
 export type CommandResult = {
   success: boolean;
@@ -43,7 +40,7 @@ export type BatchSummary = {
 
 export type FileMapping = {
   inputPath: string;
-  outputPath: string;
+	fileName: string;
   status: "pending" | "processing" | "success" | "failed" | "skipped";
   error?: string;
 };

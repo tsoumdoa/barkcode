@@ -1,12 +1,12 @@
 import { z } from "zod";
 
 export const BarkCommandSchema = z.object({
-  id: z.string().optional(),
+  id: z.string(),
   name: z.string(),
   description: z.string().optional(),
   rhCommand: z.string(),
-  inputPattern: z.string().optional(),
-  inputFolder: z.string().optional(),
+  inputPattern: z.string(),
+  inputFolder: z.string(),
 });
 
 export const BarkcodeConfigSchema = z.object({
