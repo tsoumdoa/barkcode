@@ -1,8 +1,24 @@
 import chalk from "chalk";
 import { spawn } from "child_process";
-import type { RhinoInstance, CommandResult } from "../types";
+import { existsSync } from "fs";
+import type { RhinoInstance, CommandResult, BarkCommand } from "../types";
 import { DEFAULT_TIMEOUT } from "../constants";
 import { displayInfo, displayDebug } from "./logger";
+
+export async function pollForFile(
+  filePath: string,
+  timeoutMs: number = 30000,
+  intervalMs: number = 500,
+): Promise<boolean> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    if (existsSync(filePath)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return false;
+}
 
 export async function connect(): Promise<RhinoInstance> {
 	const proc = spawn("rhinocode", ["list"], {
@@ -33,61 +49,61 @@ export async function connect(): Promise<RhinoInstance> {
 export async function execute(
 	inputFile: string,
 	fileName: string,
-	command: string,
+	command: BarkCommand,
 	projectRoot: string,
 ): Promise<CommandResult> {
 	const timeout = DEFAULT_TIMEOUT * 1000;
-
+	const pollInterval = command.pollIntervalMs ?? 500;
 	const startTime = Date.now();
 
-	let replacedCommand = command.replace(/{{fileName}}/g, fileName);
+	let replacedCommand = command.rhCommand.replace(/{{fileName}}/g, fileName);
 	replacedCommand = replacedCommand.replace(/\.\//g, projectRoot + "/");
 
-	return new Promise((resolve) => {
-		const fullArgs = ["command", '-_open', `"${inputFile}"`, replacedCommand];
-		displayDebug("rhinocode", `spawn: rhinocode ${fullArgs.join(" ")}`);
-		displayDebug("rhinocode", `command string: "${replacedCommand}"`);
+	const openArgs = ["command", '-_open', `"${inputFile}"`];
+	displayDebug("rhinocode", `spawn: rhinocode ${openArgs.join(" ")}`);
 
-		const proc = spawn("rhinocode", fullArgs, {
+	return new Promise((resolve) => {
+		const openProc = spawn("rhinocode", openArgs, {
 			stdio: "pipe",
 		});
 
+		openProc.on("close", (openCode) => {
+			displayDebug("rhinocode", `file opened with code: ${openCode}`);
+
+			displayDebug("rhinocode", `command string: "${replacedCommand}"`);
+			const cmdProc = spawn("rhinocode", ["command", replacedCommand], {
+				stdio: "pipe",
+			});
+
+			cmdProc.on("close", (cmdCode) => {
+				displayDebug("rhinocode", `command executed with code: ${cmdCode}`);
+
+				if (command.pollForExport && command.outputFolder) {
+					const outputPath = `${command.outputFolder}/${fileName}`;
+					displayDebug("rhinocode", `polling for export: ${outputPath}`);
+
+					(async () => {
+						const found = await pollForFile(outputPath, timeout, pollInterval);
+						displayDebug("rhinocode", `export file found: ${found}`);
+						resolve({
+							success: true,
+							output: `Export completed: ${found}`,
+							durationMs: Date.now() - startTime,
+						});
+					})();
+				} else {
+					resolve({
+						success: true,
+						output: stdout,
+						durationMs: Date.now() - startTime,
+					});
+				}
+			});
+		});
+
 		let stdout = "";
-		let stderr = "";
-
-		proc.stdout?.on("data", (chunk) => {
+		openProc.stdout?.on("data", (chunk) => {
 			stdout += chunk.toString();
-		});
-
-		proc.stderr?.on("data", (chunk) => {
-			stderr += chunk.toString();
-		});
-
-		const timeoutId = setTimeout(() => {
-			proc.kill();
-			displayDebug("rhinocode", `timed out after ${timeout}ms`);
-			resolve({
-				success: false,
-				output: stdout,
-				error: "Command timed out",
-				durationMs: Date.now() - startTime,
-			});
-		}, timeout);
-
-		proc.on("close", (code) => {
-			clearTimeout(timeoutId);
-			const duration = Date.now() - startTime;
-
-			displayDebug("rhinocode", `exit code: ${code}, duration: ${duration}ms`);
-			if (stdout) displayDebug("rhinocode", `stdout: ${stdout}`);
-			if (stderr) displayDebug("rhinocode", `stderr: ${stderr}`);
-
-			resolve({
-				success: code === 0,
-				output: stdout,
-				error: stderr || undefined,
-				durationMs: duration,
-			});
 		});
 	});
 }
@@ -137,4 +153,14 @@ export async function listRhinoInstances(): Promise<string[]> {
 			return (parts[1] || parts[0]) ?? "";
 		})
 		.filter((s): s is string => s !== "");
+}
+
+export async function closeAll(): Promise<void> {
+	displayDebug("rhinocode", "running _-Quit on all instances");
+	const proc = spawn("rhinocode", ["command", "_-Quit"], {
+		stdio: "pipe",
+	});
+	await new Promise<void>((resolve) => {
+		proc.on("close", () => resolve());
+	});
 }

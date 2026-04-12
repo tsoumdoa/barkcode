@@ -2,7 +2,7 @@ import { glob } from "glob";
 import chalk from "chalk";
 import { resolve, join } from "path";
 import type { BatchSummary, FileMapping, BarkCommand } from "../types";
-import { execute } from "./rhinocode";
+import { execute, closeAll } from "./rhinocode";
 import { displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug } from "./logger";
 
 export async function collectFiles(
@@ -76,7 +76,7 @@ export async function processBatch(
 					const result = await execute(
 						mapping.inputPath,
 						mapping.fileName,
-						rhCommand,
+						command,
 						projectRoot,
 					);
 					if (result.success) {
@@ -96,6 +96,8 @@ export async function processBatch(
 			}
 		}),
 	);
+	displayDebug("processBatch", "all instances finished processing");
+	await closeAll();
 
 	const summary: BatchSummary = {
 		total: inputFiles.length,
