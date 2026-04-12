@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { spawn } from "child_process";
 import { existsSync } from "fs";
+import { join, sep } from "path";
 import type { RhinoInstance, CommandResult, BarkCommand } from "../types";
 import { DEFAULT_TIMEOUT } from "../constants";
 import { displayInfo, displayDebug } from "./logger";
@@ -57,7 +58,7 @@ export async function execute(
 	const startTime = Date.now();
 
 	let replacedCommand = command.rhCommand.replace(/{{fileName}}/g, fileName);
-	replacedCommand = replacedCommand.replace(/\.\//g, projectRoot + "/");
+	replacedCommand = replacedCommand.replace(/\.\//g, projectRoot + sep);
 
 	const openArgs = ["command", '-_open', `"${inputFile}"`];
 	displayDebug("rhinocode", `spawn: rhinocode ${openArgs.join(" ")}`);
@@ -79,7 +80,7 @@ export async function execute(
 				displayDebug("rhinocode", `command executed with code: ${cmdCode}`);
 
 				if (command.pollForExport && command.outputFolder) {
-					const outputPath = `${command.outputFolder}/${fileName}`;
+					const outputPath = join(command.outputFolder, fileName);
 					displayDebug("rhinocode", `polling for export: ${outputPath}`);
 
 					(async () => {

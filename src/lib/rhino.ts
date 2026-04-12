@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { platform } from "os";
+import { join } from "path";
 import { RHINO_PATH } from "../constants";
 import { isRhinocodeAvailable } from "./rhinocode";
 import { displayError, displayInfo, displayWarning, displaySuccess } from "./logger";
@@ -90,7 +91,7 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 
 			displayWarning("=== DRY RUN MODE ===\n");
 			displayInfo("Command: " + command.rhCommand);
-			displayInfo("Input: " + `${inputFolder}/${inputPattern}`);
+			displayInfo("Input: " + join(inputFolder, inputPattern));
 			displayInfo("Output: " + (command.outputFolder || "(default)"));
 			displayInfo("Recursive: " + String(isRecursive));
 			displayInfo("Mode: " + (command.inputMode || "batch"));

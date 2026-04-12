@@ -6,6 +6,13 @@ import { validateConfig } from "../schema";
 
 const CONFIG_FILENAME = "barkcode.json";
 
+function getRoot(): string {
+  if (sep === "/") {
+    return "/";
+  }
+  return process.env.SystemDrive + "\\" || "C:\\";
+}
+
 export async function findConfig(
   startDir?: string,
   explicitPath?: string,
@@ -18,7 +25,7 @@ export async function findConfig(
   }
 
   let currentDir = startDir || process.cwd();
-  const root = sep === "/" ? "/" : "C:\\";
+  const root = getRoot();
 
   while (true) {
     const configPath = resolve(currentDir, CONFIG_FILENAME);

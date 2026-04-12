@@ -1,3 +1,4 @@
+import { basename, relative } from "path";
 import { getCommand, loadConfig } from "../lib/config";
 import {
 	collectFiles,
@@ -85,8 +86,7 @@ export async function executeCommandIfRequested(
 
 	const files = await collectFiles(inputFolder, inputPattern, projectRoot);
 	const fileNames = files.map((file) => {
-		const fullPath = file.replace(projectRoot, "");
-		const fileName = fullPath.split("/").pop() || fullPath;
+		const fileName = basename(file);
 		return fileName.replace(/\.[^/.]+$/, "");
 	});
 

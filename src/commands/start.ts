@@ -1,3 +1,4 @@
+import { basename, join } from "path";
 import { createRhinoRunner } from "../lib/rhino";
 import { RHINO_PATH } from "../constants";
 import { showCommandMenu } from "../lib/menu";
@@ -48,7 +49,7 @@ export async function startRun(
 
 		if (action.type === "run") {
 			displayBold(`\nRunning: ${action.command.name}`);
-			displayInfo(`  Input: ${action.command.inputFolder || "."}/${action.command.inputPattern || "*.3dm"}`);
+			displayInfo(`  Input: ${join(action.command.inputFolder || ".", action.command.inputPattern || "*.3dm")}`);
 
 			if (action.files.length === 0) {
 				displayWarning(`  No files found matching ${action.command.inputPattern || "*.3dm"}`);
@@ -58,7 +59,7 @@ export async function startRun(
 			displayInfo(`  Found ${action.files.length} file(s)`);
 
 			const fileNamesWithoutExt = action.files.map((file) => {
-				const fileName = file.split("/").pop() || file;
+				const fileName = basename(file);
 				return fileName.replace(/\.[^/.]+$/, "");
 			});
 
