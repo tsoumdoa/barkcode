@@ -97,6 +97,8 @@ export async function executeCommandIfRequested(
 
 	displayInfo(`Found ${files.length} file(s)\n`);
 
+	const isMac = platform() === "darwin";
+
 	if (isDryRun) {
 		await previewBatch(command, files, fileNames, projectRoot);
 		return;
@@ -108,6 +110,7 @@ export async function executeCommandIfRequested(
 		fileNames,
 		instances,
 		projectRoot,
+		isMac,
 	);
 
 	printBatchSummary(summary);

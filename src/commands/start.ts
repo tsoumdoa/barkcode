@@ -4,6 +4,7 @@ import { showCommandMenu } from "../lib/menu";
 import { processBatch, previewBatch, printBatchSummary } from "../lib/batch";
 import { displaySuccess, displayWarning, displayInfo, displayBold } from "../lib/logger";
 import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./start-helpers";
+import { platform } from "os";
 
 export async function startRun(
 	options: {
@@ -62,9 +63,10 @@ export async function startRun(
 				return fileName.replace(/\.[^/.]+$/, "");
 			});
 
+			const isMac = platform() === "darwin";
 			const { summary } = isDryRun
 				? await previewBatch(action.command, action.files, fileNamesWithoutExt, projectRoot)
-				: await processBatch(action.command, action.files, fileNamesWithoutExt, instances, projectRoot);
+				: await processBatch(action.command, action.files, fileNamesWithoutExt, instances, projectRoot, isMac);
 
 			printBatchSummary(summary);
 		}
