@@ -11,7 +11,7 @@ export async function collectFiles(
 	projectRoot: string,
 ): Promise<string[]> {
 	const fullInputPath = resolve(projectRoot, inputFolder);
-	const globPattern = join(fullInputPath, "**", pattern);
+	const globPattern = join(fullInputPath, "**", pattern).replace(/\\/g, "/");
 
 	displayDebug("collectFiles", `inputFolder: ${inputFolder}`);
 	displayDebug("collectFiles", `globPattern: ${globPattern}`);
