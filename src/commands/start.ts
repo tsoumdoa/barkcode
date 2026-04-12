@@ -1,8 +1,9 @@
+import { basename, join } from "path";
 import { createRhinoRunner } from "../lib/rhino";
 import { RHINO_PATH } from "../constants";
 import { showCommandMenu } from "../lib/menu";
-import { processBatch, previewBatch, printBatchSummary } from "../lib/batch";
-import { displaySuccess, displayWarning, displayInfo, displayBold } from "../lib/logger";
+import { processBatch, printBatchSummary } from "../lib/batch";
+import { displaySuccess, displayWarning, displayInfo, displayBold, setDebugMode } from "../lib/logger";
 import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./start-helpers";
 
 export async function startRun(
@@ -10,20 +11,19 @@ export async function startRun(
 		spawn?: number;
 		config?: string;
 		command?: string;
-		dryRun?: boolean;
+		debug?: boolean;
 	} = {},
 ) {
 	const {
 		spawn: spawnCount = 1,
 		config: configPath,
 		command: commandName,
-		dryRun: isDryRun = false,
+		debug: isDebug = false,
 	} = options;
-	const rhinoRunner = createRhinoRunner(RHINO_PATH, isDryRun, spawnCount);
 
-	if (isDryRun) {
-		displayWarning("=== DRY RUN MODE ===\n");
-	}
+	setDebugMode(isDebug);
+
+	const rhinoRunner = createRhinoRunner(RHINO_PATH, spawnCount);
 
 	await rhinoRunner.checkRhinoOrExit();
 	const loadedConfig = await loadConfigOrExit({ configPath });
@@ -33,10 +33,10 @@ export async function startRun(
 	displaySuccess(`Config loaded from ${loadedConfig.configPath}`);
 	displayInfo(`  Project root: ${projectRoot}\n`);
 
-	const instances = await ensureRhinoInstances(rhinoRunner, spawnCount, isDryRun);
+	const instances = await ensureRhinoInstances(rhinoRunner, spawnCount);
 
 	if (commandName) {
-		await executeCommandIfRequested(/* rhinoRunner, */ commandName, config, projectRoot, instances, isDryRun);
+		await executeCommandIfRequested(commandName, config, projectRoot, instances);
 	}
 
 	displayInfo("\nPress Ctrl+C to exit\n");
@@ -48,7 +48,7 @@ export async function startRun(
 
 		if (action.type === "run") {
 			displayBold(`\nRunning: ${action.command.name}`);
-			displayInfo(`  Input: ${action.command.inputFolder || "."}/${action.command.inputPattern || "*.3dm"}`);
+			displayInfo(`  Input: ${join(action.command.inputFolder || ".", action.command.inputPattern || "*.3dm")}`);
 
 			if (action.files.length === 0) {
 				displayWarning(`  No files found matching ${action.command.inputPattern || "*.3dm"}`);
@@ -58,17 +58,21 @@ export async function startRun(
 			displayInfo(`  Found ${action.files.length} file(s)`);
 
 			const fileNamesWithoutExt = action.files.map((file) => {
-				const fileName = file.split("/").pop() || file;
+				const fileName = basename(file);
 				return fileName.replace(/\.[^/.]+$/, "");
 			});
 
-			const { summary } = isDryRun
-				? await previewBatch(action.command, action.files, fileNamesWithoutExt, projectRoot)
-				: await processBatch(action.command, action.files, fileNamesWithoutExt, instances, projectRoot);
+			const { summary } = await processBatch(
+				action.command,
+				action.files,
+				fileNamesWithoutExt,
+				instances,
+				projectRoot,
+			);
 
 			printBatchSummary(summary);
 		}
 	}
 
-	displayInfo("\nExiting Barkcode. Rhino will remain open.");
+	displayInfo("\nExiting Barkcode. Please shut Rhino if it is still running.");
 }

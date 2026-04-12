@@ -7,8 +7,8 @@ export const BarkCommandSchema = z.object({
   rhCommand: z.string(),
   inputPattern: z.string(),
   inputFolder: z.string(),
-  outputFolder: z.string().optional(),
-  pollForExport: z.boolean().optional(),
+  outputFolder: z.string(),
+  outputSuffix: z.string(),
   pollIntervalMs: z.number().optional(),
 });
 

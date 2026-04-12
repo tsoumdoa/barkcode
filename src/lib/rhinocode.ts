@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { spawn } from "child_process";
 import { existsSync } from "fs";
+import { join, sep } from "path";
 import type { RhinoInstance, CommandResult, BarkCommand } from "../types";
 import { DEFAULT_TIMEOUT } from "../constants";
 import { displayInfo, displayDebug } from "./logger";
@@ -11,12 +12,22 @@ export async function pollForFile(
   intervalMs: number = 500,
 ): Promise<boolean> {
   const startTime = Date.now();
+  displayDebug("pollForFile", `starting poll for: ${filePath}`);
+  displayDebug("pollForFile", `timeout: ${timeoutMs}ms, interval: ${intervalMs}ms`);
+
   while (Date.now() - startTime < timeoutMs) {
+    const elapsed = Date.now() - startTime;
     if (existsSync(filePath)) {
+      displayDebug("pollForFile", `file found after ${elapsed}ms: ${filePath}`);
       return true;
+    }
+    if (elapsed % 2000 < intervalMs * 2) {
+      displayDebug("pollForFile", `still polling... ${elapsed}ms elapsed`);
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
+
+  displayDebug("pollForFile", `TIMEOUT after ${timeoutMs}ms: ${filePath} not found`);
   return false;
 }
 
@@ -57,7 +68,7 @@ export async function execute(
 	const startTime = Date.now();
 
 	let replacedCommand = command.rhCommand.replace(/{{fileName}}/g, fileName);
-	replacedCommand = replacedCommand.replace(/\.\//g, projectRoot + "/");
+	replacedCommand = replacedCommand.replace(/\.\//g, projectRoot + sep);
 
 	const openArgs = ["command", '-_open', `"${inputFile}"`];
 	displayDebug("rhinocode", `spawn: rhinocode ${openArgs.join(" ")}`);
@@ -78,26 +89,18 @@ export async function execute(
 			cmdProc.on("close", (cmdCode) => {
 				displayDebug("rhinocode", `command executed with code: ${cmdCode}`);
 
-				if (command.pollForExport && command.outputFolder) {
-					const outputPath = `${command.outputFolder}/${fileName}`;
-					displayDebug("rhinocode", `polling for export: ${outputPath}`);
+				const outputPath = join(command.outputFolder, fileName + "." + command.outputSuffix);
+				displayDebug("rhinocode", `polling for export: ${outputPath}`);
 
-					(async () => {
-						const found = await pollForFile(outputPath, timeout, pollInterval);
-						displayDebug("rhinocode", `export file found: ${found}`);
-						resolve({
-							success: true,
-							output: `Export completed: ${found}`,
-							durationMs: Date.now() - startTime,
-						});
-					})();
-				} else {
+				(async () => {
+					const found = await pollForFile(outputPath, timeout, pollInterval);
+					displayDebug("rhinocode", `export file found: ${found}`);
 					resolve({
-						success: true,
-						output: stdout,
+						success: found,
+						output: `Export completed: ${found}`,
 						durationMs: Date.now() - startTime,
 					});
-				}
+				})();
 			});
 		});
 

@@ -14,7 +14,9 @@ const DEFAULT_CONFIG: BarkcodeConfig = {
 			description: "Convert all 3DM files to STEP format",
 			rhCommand: '_-SaveAs "./test/converted/{{fileName}}.skp" _Enter _Enter',
 			inputPattern: "*.3dm",
-			inputFolder: "./test/models",
+			outputSuffix: "skp",
+			inputFolder: "./test/5",
+			outputFolder: "./test/converted",
 		},
 	],
 };

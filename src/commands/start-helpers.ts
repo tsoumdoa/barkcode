@@ -1,10 +1,6 @@
+import { basename } from "path";
 import { getCommand, loadConfig } from "../lib/config";
-import {
-	collectFiles,
-	printBatchSummary,
-	processBatch,
-	previewBatch,
-} from "../lib/batch";
+import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
 import {
 	displaySuccess,
 	displayError,
@@ -33,7 +29,6 @@ export async function loadConfigOrExit(options: { configPath?: string }) {
 export async function ensureRhinoInstances(
 	rhinoRunner: ReturnType<typeof createRhinoRunner>,
 	spawnCount: number,
-	isDryRun: boolean,
 ) {
 	if (platform() === "darwin" && spawnCount > 1) {
 		displayWarning(
@@ -44,7 +39,7 @@ export async function ensureRhinoInstances(
 
 	let instances = await rhinoRunner.getRunningProcesses();
 
-	if (!isDryRun && instances.length < spawnCount) {
+	if (instances.length < spawnCount) {
 		if (platform() === "darwin") {
 			displayWarning(
 				`On Mac, please manually open ${spawnCount} Rhino instance(s) and run the _StartScriptServer command in each.\n`,
@@ -64,12 +59,10 @@ export async function ensureRhinoInstances(
 }
 
 export async function executeCommandIfRequested(
-	// rhinoRunner: ReturnType<typeof createRhinoRunner>,
 	commandName: string,
 	config: BarkcodeConfig,
 	projectRoot: string,
 	instances: string[],
-	isDryRun: boolean,
 ) {
 	const command = getCommand(config, commandName);
 
@@ -85,22 +78,16 @@ export async function executeCommandIfRequested(
 
 	const files = await collectFiles(inputFolder, inputPattern, projectRoot);
 	const fileNames = files.map((file) => {
-		const fullPath = file.replace(projectRoot, "");
-		const fileName = fullPath.split("/").pop() || fullPath;
+		const fileName = basename(file);
 		return fileName.replace(/\.[^/.]+$/, "");
 	});
 
-	if (files.length === 0 && !isDryRun) {
+	if (files.length === 0) {
 		displayWarning(`No files found matching ${inputPattern}`);
 		process.exit(1);
 	}
 
 	displayInfo(`Found ${files.length} file(s)\n`);
-
-	if (isDryRun) {
-		await previewBatch(command, files, fileNames, projectRoot);
-		return;
-	}
 
 	const { summary } = await processBatch(
 		command,

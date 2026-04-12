@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { platform } from "os";
+import { join } from "path";
 import { RHINO_PATH } from "../constants";
 import { isRhinocodeAvailable } from "./rhinocode";
 import { displayError, displayInfo, displayWarning, displaySuccess } from "./logger";
@@ -17,12 +18,10 @@ export async function isRhinoRunning(): Promise<{ running: boolean; output: stri
 	return { running: output.includes("rhinocode_remotepipe"), output };
 }
 
-export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, spawnCount: number = 1) {
+export function createRhinoRunner(rhinoPath: string, spawnCount: number = 1) {
 	return {
 		async checkRhinoOrExit() {
-
 			displayInfo("Checking for Rhino 8...");
-			if (dryMode) return;
 			if (platform() === "darwin") return;
 			const file = Bun.file(rhinoPath);
 			const exists = await file.exists();
@@ -36,7 +35,6 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 			displaySuccess("Rhino 8 found.\n");
 		},
 		spawnRhino(count: number) {
-			if (dryMode) return;
 			for (let i = 0; i < count; i++) {
 				Bun.spawn(
 					[RHINO_PATH, "/nosplash", '/runscript="_StartScriptServer"'],
@@ -51,7 +49,6 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 		},
 		async checkRhinocodeOrExit(): Promise<void> {
 			displayInfo("Checking for rhinocode...");
-			if (dryMode) return;
 			const hasRhinocode = await isRhinocodeAvailable();
 			if (!hasRhinocode) {
 				displayError("rhinocode not recognized!");
@@ -61,9 +58,6 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 			displaySuccess("rhinocode found.");
 		},
 		getRunningProcesses: async () => {
-			if (dryMode) {
-				return Array.from({ length: spawnCount }, (_, i) => `Rhino_${i + 1}`);
-			}
 			const { output } = await isRhinoRunning();
 			if (!output.trim()) return [""];
 			const lines = output.trim().split("\n").slice(1);
@@ -78,30 +72,6 @@ export function createRhinoRunner(rhinoPath: string, dryMode: boolean = false, s
 				.filter((p): p is string => p !== null);
 		},
 		waitForRhinoInstances,
-
-		async displayDryRunInfo(options: {
-			command: { name: string; rhCommand: string; outputFolder?: string; inputMode?: string; onConflict?: string };
-			files: string[];
-			inputFolder: string;
-			inputPattern: string;
-			isRecursive: boolean;
-		}): Promise<void> {
-			const { command, files, inputFolder, inputPattern, isRecursive } = options;
-
-			displayWarning("=== DRY RUN MODE ===\n");
-			displayInfo("Command: " + command.rhCommand);
-			displayInfo("Input: " + `${inputFolder}/${inputPattern}`);
-			displayInfo("Output: " + (command.outputFolder || "(default)"));
-			displayInfo("Recursive: " + String(isRecursive));
-			displayInfo("Mode: " + (command.inputMode || "batch"));
-			console.log();
-			displaySuccess("Files that would be processed:");
-			files.forEach((file) => {
-				displayInfo("  - " + file);
-			});
-			console.log();
-			displayWarning("Dry run complete. No changes made.");
-		},
 	};
 }
 
@@ -137,5 +107,3 @@ export async function waitForRhinoInstances(expectedCount: number): Promise<stri
 		await delay(1000);
 	}
 }
-
-
