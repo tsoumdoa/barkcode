@@ -1,6 +1,6 @@
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
-import { resolve, dirname, sep } from "path";
+import { resolve, dirname, sep, parse } from "path";
 import type { BarkcodeConfig, LoadedConfig, ConfigLoadOptions } from "../types";
 import { validateConfig } from "../schema";
 
@@ -17,8 +17,8 @@ export async function findConfig(
     return null;
   }
 
-  let currentDir = startDir || process.cwd();
-  const root = sep === "/" ? "/" : "C:\\";
+	let currentDir = startDir || process.cwd();
+	const root = parse(currentDir).root;
 
   while (true) {
     const configPath = resolve(currentDir, CONFIG_FILENAME);

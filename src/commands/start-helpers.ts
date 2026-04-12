@@ -1,4 +1,5 @@
 import { getCommand, loadConfig } from "../lib/config";
+import { basename } from "path";
 import {
 	collectFiles,
 	printBatchSummary,
@@ -85,9 +86,7 @@ export async function executeCommandIfRequested(
 
 	const files = await collectFiles(inputFolder, inputPattern, projectRoot);
 	const fileNames = files.map((file) => {
-		const fullPath = file.replace(projectRoot, "");
-		const fileName = fullPath.split("/").pop() || fullPath;
-		return fileName.replace(/\.[^/.]+$/, "");
+		return basename(file).replace(/\.[^/.]+$/, "");
 	});
 
 	if (files.length === 0 && !isDryRun) {

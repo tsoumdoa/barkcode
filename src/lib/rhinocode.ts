@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { spawn } from "child_process";
+import { resolve, sep, join } from "path";
 import { existsSync } from "fs";
 import type { RhinoInstance, CommandResult } from "../types";
 import { DEFAULT_TIMEOUT } from "../constants";
@@ -43,7 +44,7 @@ export { waitForRhlFileDeleted };
 
 async function isRhinoResponsive(timeoutMs = 5000): Promise<boolean> {
 	return new Promise((resolve) => {
-		const proc = spawn("rhinocode", ["command", "_NoEcho"], { stdio: "pipe" });
+		const proc = spawn("rhinocode", ["command", "_NoEcho"], { stdio: "pipe", shell: true });
 		let stdout = "";
 
 		proc.stdout?.on("data", (chunk) => {
@@ -130,7 +131,7 @@ export async function execute(
 	const startTime = Date.now();
 
 	let replacedCommand = command.replace(/{{fileName}}/g, fileName);
-	replacedCommand = replacedCommand.replace(/\.\//g, projectRoot + "/");
+	replacedCommand = replacedCommand.replace(/\.\//g, resolve(projectRoot) + sep);
 
 	const openCommand = `_-open "${inputFile}"`;
 	const openArgs = ["command", openCommand];
@@ -139,6 +140,7 @@ export async function execute(
 	displayDebug("rhinocode", `spawn: rhinocode ${openArgs.join(" ")}`);
 	spawn("rhinocode", openArgs, {
 		stdio: "pipe",
+		shell: true,
 	});
 
 	await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -146,6 +148,7 @@ export async function execute(
 	displayDebug("rhinocode", `spawn: rhinocode ${commandArgs.join(" ")}`);
 	spawn("rhinocode", commandArgs, {
 		stdio: "pipe",
+		shell: true,
 	});
 
 
@@ -170,6 +173,7 @@ export async function closeFile(
 
 		const proc = spawn("rhinocode", fullArgs, {
 			stdio: "pipe",
+			shell: true,
 		});
 
 		let stdout = "";
@@ -219,7 +223,7 @@ export async function saveUntitledDocument(
 	const timeout = DEFAULT_TIMEOUT * 1000;
 	const startTime = Date.now();
 
-	const fullPath = projectRoot + "/" + outputFolder + "untitled.3dm";
+	const fullPath = join(projectRoot, outputFolder, "untitled.3dm");
 	const saveCommand = `_-Save "${fullPath}" `;
 	displayDebug("rhinocode", `save untitled command: "${saveCommand}"`);
 
@@ -229,6 +233,7 @@ export async function saveUntitledDocument(
 
 		const proc = spawn("rhinocode", fullArgs, {
 			stdio: "pipe",
+			shell: true,
 		});
 
 		let stdout = "";

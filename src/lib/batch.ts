@@ -1,6 +1,6 @@
 import { glob } from "glob";
 import chalk from "chalk";
-import { resolve, join, dirname } from "path";
+import { resolve, join, dirname, basename } from "path";
 import { spawn } from "child_process";
 import { existsSync } from "fs";
 import type { BatchSummary, FileMapping, BarkCommand } from "../types";
@@ -39,7 +39,7 @@ function extractOutputPath(rhCommand: string, fileName: string, projectRoot: str
 	let outputPath = match[1] || "";
 	outputPath = outputPath.replace(/\\{/g, "{").replace(/\\}/g, "}");
 	outputPath = outputPath.replace(/{{fileName}}/g, fileName);
-	outputPath = outputPath.replace(/\.\//g, projectRoot + "/");
+	outputPath = path.join(projectRoot, outputPath.replace(/^\.\//, ""));
 	return outputPath;
 }
 
@@ -50,9 +50,9 @@ function extractOutputFolder(rhCommand: string): string {
 	let folderPath = match[1] || "";
 	folderPath = folderPath.replace(/\\{/g, "{").replace(/\\}/g, "}");
 	folderPath = folderPath.replace(/\.\//g, "");
-	const lastSlash = folderPath.lastIndexOf("/");
-	if (lastSlash === -1) return "./";
-	return folderPath.substring(0, lastSlash + 1);
+	const dir = dirname(folderPath);
+	if (dir === "" || dir === ".") return "./";
+	return dir.replace(/\\/g, "/") + "/";
 }
 
 async function processOneFile(
@@ -164,7 +164,7 @@ export async function processBatch(
 	if (succeeded > 0) {
 		displayDebug("processBatch", `quitting Rhino`);
 		const quitCommand = `_-quit`;
-		const proc = spawn("rhinocode", ["command", quitCommand], { stdio: "pipe" });
+		const proc = spawn("rhinocode", ["command", quitCommand], { stdio: "pipe", shell: true });
 		await new Promise<void>((resolve) => {
 			proc.on("close", () => resolve());
 		});

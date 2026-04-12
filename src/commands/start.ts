@@ -5,6 +5,7 @@ import { processBatch, previewBatch, printBatchSummary } from "../lib/batch";
 import { displaySuccess, displayWarning, displayInfo, displayBold } from "../lib/logger";
 import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./start-helpers";
 import { platform } from "os";
+import { basename } from "path";
 
 export async function startRun(
 	options: {
@@ -59,7 +60,7 @@ export async function startRun(
 			displayInfo(`  Found ${action.files.length} file(s)`);
 
 			const fileNamesWithoutExt = action.files.map((file) => {
-				const fileName = file.split("/").pop() || file;
+				const fileName = basename(file);
 				return fileName.replace(/\.[^/.]+$/, "");
 			});
 
