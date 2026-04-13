@@ -1,9 +1,8 @@
 import { glob } from "glob";
-import chalk from "chalk";
 import { resolve, join } from "path";
 import type { BatchSummary, FileMapping, BarkCommand } from "../types";
 import { execute, closeAll } from "./rhinocode";
-import { displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug, displayProgress, flushProgress } from "./logger";
+import { displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug, displayProgress, flushProgress } from "./logger";
 
 export async function collectFiles(
 	inputFolder: string,
@@ -142,33 +141,6 @@ export async function processBatch(
 	};
 
 	return { mappings: finalMappings, summary };
-}
-
-export async function previewBatch(
-	command: BarkCommand,
-	inputFiles: string[],
-	fileNames: string[],
-	projectRoot: string,
-): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
-	displayInfo(`\nPreview. Would process ${inputFiles.length} files:\n`);
-	for (const inputPath of inputFiles) {
-		displayInfo(`Running Command: ${command.name}`);
-		displayDebug("previewBatch", `> ${command.rhCommand}`);
-		console.log(`  ${inputPath}`);
-	}
-	displayWarning("\nPreview only. No files were processed.\n");
-
-	const mappings = inputFiles.map((inputPath, index) => ({
-		inputPath,
-		fileName: fileNames[index] || "unknown",
-		outputPath: inputPath,
-		status: "pending" as const,
-	}));
-
-	return {
-		mappings,
-		summary: { total: inputFiles.length, succeeded: 0, failed: 0, skipped: 0 },
-	};
 }
 
 export function printBatchSummary(summary: BatchSummary): void {

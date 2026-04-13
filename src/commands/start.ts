@@ -2,7 +2,7 @@ import { basename, join } from "path";
 import { createRhinoRunner } from "../lib/rhino";
 import { RHINO_PATH } from "../constants";
 import { showCommandMenu } from "../lib/menu";
-import { processBatch, previewBatch, printBatchSummary } from "../lib/batch";
+import { processBatch, printBatchSummary } from "../lib/batch";
 import { displaySuccess, displayWarning, displayInfo, displayBold, setDebugMode } from "../lib/logger";
 import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./start-helpers";
 
@@ -11,7 +11,6 @@ export async function startRun(
 		spawn?: number;
 		config?: string;
 		command?: string;
-		dryRun?: boolean;
 		debug?: boolean;
 	} = {},
 ) {
@@ -19,17 +18,12 @@ export async function startRun(
 		spawn: spawnCount = 1,
 		config: configPath,
 		command: commandName,
-		dryRun: isDryRun = false,
 		debug: isDebug = false,
 	} = options;
 
 	setDebugMode(isDebug);
 
-	const rhinoRunner = createRhinoRunner(RHINO_PATH, isDryRun, spawnCount);
-
-	if (isDryRun) {
-		displayWarning("=== DRY RUN MODE ===\n");
-	}
+	const rhinoRunner = createRhinoRunner(RHINO_PATH, spawnCount);
 
 	await rhinoRunner.checkRhinoOrExit();
 	const loadedConfig = await loadConfigOrExit({ configPath });
@@ -39,10 +33,10 @@ export async function startRun(
 	displaySuccess(`Config loaded from ${loadedConfig.configPath}`);
 	displayInfo(`  Project root: ${projectRoot}\n`);
 
-	const instances = await ensureRhinoInstances(rhinoRunner, spawnCount, isDryRun);
+	const instances = await ensureRhinoInstances(rhinoRunner, spawnCount);
 
 	if (commandName) {
-		await executeCommandIfRequested(/* rhinoRunner, */ commandName, config, projectRoot, instances, isDryRun);
+		await executeCommandIfRequested(commandName, config, projectRoot, instances);
 	}
 
 	displayInfo("\nPress Ctrl+C to exit\n");
@@ -68,9 +62,13 @@ export async function startRun(
 				return fileName.replace(/\.[^/.]+$/, "");
 			});
 
-			const { summary } = isDryRun
-				? await previewBatch(action.command, action.files, fileNamesWithoutExt, projectRoot)
-				: await processBatch(action.command, action.files, fileNamesWithoutExt, instances, projectRoot);
+			const { summary } = await processBatch(
+				action.command,
+				action.files,
+				fileNamesWithoutExt,
+				instances,
+				projectRoot,
+			);
 
 			printBatchSummary(summary);
 		}
