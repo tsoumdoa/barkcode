@@ -133,17 +133,26 @@ export async function processBatch(
 	displayDebug("processBatch", "all instances finished processing");
 	await closeAll();
 
+	const totalElapsed = Date.now() - batchStartTime;
+
 	const summary: BatchSummary = {
 		total: inputFiles.length,
 		succeeded,
 		failed,
 		skipped: 0,
+		durationMs: totalElapsed,
 	};
 
 	return { mappings: finalMappings, summary };
 }
 
 export function printBatchSummary(summary: BatchSummary): void {
+	const elapsedSec = Math.floor(summary.durationMs / 1000);
+	const elapsedMin = Math.floor(elapsedSec / 60);
+	const elapsedStr = elapsedMin > 0
+		 ? `${elapsedMin}m ${elapsedSec % 60}s`
+		: `${elapsedSec}s`;
+
 	displayBold("\n=== Batch Summary ===");
 	displayTotal(`Total:    ${summary.total}`);
 	displaySucceeded(`Succeeded: ${summary.succeeded}`);
@@ -153,4 +162,5 @@ export function printBatchSummary(summary: BatchSummary): void {
 	if (summary.skipped > 0) {
 		displayWarning(`Skipped:  ${summary.skipped}`);
 	}
+	displayTotal(`Duration: ${elapsedStr}`);
 }
