@@ -10,8 +10,8 @@ export type BarkCommand = {
   rhCommand: string;
   inputPattern: string;
   inputFolder: string;
-  outputFolder?: string;
-  pollForExport?: boolean;
+  outputFolder: string;
+  outputSuffix: string;
   pollIntervalMs?: number;
 };
 
