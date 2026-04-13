@@ -1,4 +1,5 @@
 import { glob } from "glob";
+import { stat } from "fs/promises";
 import { resolve, join } from "path";
 import type { BatchSummary, FileMapping, BarkCommand } from "../types";
 import { execute, closeAll } from "./rhinocode";
@@ -22,20 +23,28 @@ export async function collectFiles(
 
 	displayDebug("collectFiles", `found ${files.length} file(s)`);
 
-	return files;
-}
-function validateInstances(instances: string[]): string[] {
-	return instances.filter((id) => id && id.trim() !== "");
+	const fileSizes = await Promise.all(
+		files.map(async (f) => ({
+			path: f,
+			size: (await stat(f)).size,
+		})),
+	);
+
+	fileSizes.sort((a, b) => b.size - a.size);
+	const sortedFiles = fileSizes.map((f) => f.path);
+
+	displayDebug("collectFiles", `sorted ${sortedFiles.length} file(s) by size (largest first)`);
+
+	return sortedFiles;
 }
 
 export async function processBatch(
 	command: BarkCommand,
 	inputFiles: string[],
 	fileNames: string[],
-	instances: string[],
+	instanceIds: string[],
 	projectRoot: string,
 ): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
-	const { rhCommand } = command;
 	const batchStartTime = Date.now();
 
 	const mappings: FileMapping[] = inputFiles.map((inputPath, index) => ({
@@ -44,57 +53,86 @@ export async function processBatch(
 		status: "pending" as const,
 	}));
 
-	const finalMappings: FileMapping[] = [];
 	let succeeded = 0;
 	let failed = 0;
 	let completedCount = 0;
 
-	const instanceBatches = new Map<string, FileMapping[]>();
 
-	const validInstanceIds = validateInstances(instances);
-	if (validInstanceIds.length === 0) {
-		throw new Error("No Rhino instances available");
-	}
-	displayDebug("processBatch", `valid instances: ${validInstanceIds.join(", ")}`);
-	validInstanceIds.forEach((id) => instanceBatches.set(id, []));
+	displayDebug("processBatch", `valid instances: ${instanceIds.join(", ")}`);
 
-	mappings.forEach((mapping, idx) => {
-		const instanceId = validInstanceIds[idx % validInstanceIds.length]!;
-		instanceBatches.get(instanceId)!.push(mapping);
-	});
+	const stats = { succeeded: 0, failed: 0, completedCount: 0 };
+	await processBatchWorkQueue(command, mappings, instanceIds, projectRoot, batchStartTime, stats);
 
-	for (const [instanceId, batch] of instanceBatches) {
-		displayDebug("processBatch", `instance ${instanceId} gets ${batch.length} file(s)`);
-	}
+	succeeded = stats.succeeded;
+	failed = stats.failed;
+	completedCount = stats.completedCount;
 
-	displayDebug("processBatch", `starting parallel execution...`);
+	flushProgress();
+	displayDebug("processBatch", "all instances finished processing");
+	closeAll();
+
+	const totalElapsed = Date.now() - batchStartTime;
+	const summary: BatchSummary = {
+		total: inputFiles.length,
+		succeeded,
+		failed,
+		skipped: 0,
+		durationMs: totalElapsed,
+	};
+
+	return { mappings, summary };
+}
+
+async function processBatchWorkQueue(
+	command: BarkCommand,
+	mappings: FileMapping[],
+	instanceIds: string[],
+	projectRoot: string,
+	batchStartTime: number,
+	stats: { succeeded: number; failed: number; completedCount: number },
+): Promise<void> {
+
+	displayDebug("processBatch", `starting work queue with ${instanceIds.length} workers...`);
+
+	const totalFiles = mappings.length;
+	let nextIndex = 0;
+
 	await Promise.all(
-		validInstanceIds.map(async (instanceId) => {
-			const batch = instanceBatches.get(instanceId) || [];
-			for (const mapping of batch) {
+		instanceIds.map(async (instanceId) => {
+			while (true) {
+				const idx = nextIndex++;
+				if (idx >= totalFiles) break;
+
+				const mapping = mappings[idx]!;
 				mapping.status = "processing";
 				const fileStartTime = Date.now();
+
+				displayDebug("workQueue", `worker ${instanceId} grabbed file[${idx}]: ${mapping.fileName}`);
 				displayProgress(
-					completedCount + 1,
-					inputFiles.length,
+					stats.completedCount + 1,
+					totalFiles,
 					mapping.fileName,
 					"processing",
 					Date.now() - batchStartTime,
 				);
+
 				try {
 					const result = await execute(
 						mapping.inputPath,
 						mapping.fileName,
 						command,
 						projectRoot,
+						instanceId,
 					);
 					const fileElapsed = Date.now() - fileStartTime;
+
 					if (result.success) {
 						mapping.status = "success";
-						succeeded++;
+						stats.succeeded++;
+						displayDebug("workQueue", `worker ${instanceId} completed file[${idx}]: ${mapping.fileName} (${fileElapsed}ms)`);
 						displayProgress(
-							completedCount + 1,
-							inputFiles.length,
+							stats.completedCount + 1,
+							totalFiles,
 							mapping.fileName,
 							"success",
 							fileElapsed,
@@ -102,10 +140,11 @@ export async function processBatch(
 					} else {
 						mapping.status = "failed";
 						mapping.error = result.error;
-						failed++;
+						stats.failed++;
+						displayDebug("workQueue", `worker ${instanceId} failed file[${idx}]: ${mapping.fileName} (${fileElapsed}ms)`);
 						displayProgress(
-							completedCount + 1,
-							inputFiles.length,
+							stats.completedCount + 1,
+							totalFiles,
 							mapping.fileName,
 							"failed",
 							fileElapsed,
@@ -115,42 +154,27 @@ export async function processBatch(
 					const fileElapsed = Date.now() - fileStartTime;
 					mapping.status = "failed";
 					mapping.error = (e as Error).message;
-					failed++;
+					stats.failed++;
+					displayDebug("workQueue", `worker ${instanceId} error file[${idx}]: ${mapping.fileName} (${fileElapsed}ms) - ${(e as Error).message}`);
 					displayProgress(
-						completedCount + 1,
-						inputFiles.length,
+						stats.completedCount + 1,
+						totalFiles,
 						mapping.fileName,
 						"failed",
 						fileElapsed,
 					);
 				}
-				completedCount++;
-				finalMappings.push(mapping);
+				stats.completedCount++;
 			}
 		}),
 	);
-	flushProgress();
-	displayDebug("processBatch", "all instances finished processing");
-	await closeAll();
-
-	const totalElapsed = Date.now() - batchStartTime;
-
-	const summary: BatchSummary = {
-		total: inputFiles.length,
-		succeeded,
-		failed,
-		skipped: 0,
-		durationMs: totalElapsed,
-	};
-
-	return { mappings: finalMappings, summary };
 }
 
 export function printBatchSummary(summary: BatchSummary): void {
 	const elapsedSec = Math.floor(summary.durationMs / 1000);
 	const elapsedMin = Math.floor(elapsedSec / 60);
 	const elapsedStr = elapsedMin > 0
-		 ? `${elapsedMin}m ${elapsedSec % 60}s`
+		? `${elapsedMin}m ${elapsedSec % 60}s`
 		: `${elapsedSec}s`;
 
 	displayBold("\n=== Batch Summary ===");

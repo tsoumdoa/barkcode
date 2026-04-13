@@ -1,6 +1,6 @@
 import { basename, join } from "path";
 import { createRhinoRunner } from "../lib/rhino";
-import { RHINO_PATH } from "../constants";
+import { RHINO_PATH, DEFAULT_SPAWN_COUNT, MAX_SPAWN_COUNT_WARNING } from "../constants";
 import { showCommandMenu } from "../lib/menu";
 import { processBatch, printBatchSummary } from "../lib/batch";
 import { displaySuccess, displayWarning, displayInfo, displayBold, setDebugMode } from "../lib/logger";
@@ -9,13 +9,15 @@ import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } fro
 export async function run(
 	options: {
 		spawn?: number;
+		spawnDelay?: number;
 		config?: string;
 		command?: string;
 		debug?: boolean;
 	} = {},
 ) {
 	const {
-		spawn: spawnCount = 1,
+		spawn: spawnCount = DEFAULT_SPAWN_COUNT,
+		spawnDelay,
 		config: configPath,
 		command: commandName,
 		debug: isDebug = false,
@@ -23,7 +25,11 @@ export async function run(
 
 	setDebugMode(isDebug);
 
-	const rhinoRunner = createRhinoRunner(RHINO_PATH, spawnCount);
+	if (spawnCount > MAX_SPAWN_COUNT_WARNING) {
+		displayWarning(`Spawning ${spawnCount} instances may cause performance issues. Using 16 or fewer is recommended for stable results.`);
+	}
+
+	const rhinoRunner = createRhinoRunner(RHINO_PATH);
 
 	await rhinoRunner.checkRhinoOrExit();
 	const loadedConfig = await loadConfigOrExit({ configPath });
@@ -33,7 +39,7 @@ export async function run(
 	displaySuccess(`Config loaded from ${loadedConfig.configPath}`);
 	displayInfo(`  Project root: ${projectRoot}\n`);
 
-	const instances = await ensureRhinoInstances(rhinoRunner, spawnCount);
+	const { pipeIds: instances } = await ensureRhinoInstances(rhinoRunner, spawnCount, spawnDelay);
 
 	if (commandName) {
 		await executeCommandIfRequested(commandName, config, projectRoot, instances);
@@ -72,7 +78,7 @@ export async function run(
 			);
 
 			printBatchSummary(summary);
-			displayInfo("\nExiting Barkcode. Please shut Rhino if it is still running.");
+			displayInfo("\nClosing Barkcode and Rhino. Please wait.");
 			process.exit(0);
 		}
 	}

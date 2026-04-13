@@ -6,10 +6,25 @@ To install dependencies:
 bun install
 ```
 
-To run:
+
+To init barkcode.json:
 
 ```bash
-bun run index.ts
+bun run index.ts init
 ```
 
-This project was created using `bun init` in bun v1.3.3. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+To run:
+```bash
+bun run index.ts run 
+```
+
+To run with debug:
+```bash
+bun run index.ts run --debug
+```
+
+To run with spawn:
+14 seems to be the max number of processes that can be spawned.
+``` bash
+bun run .\index.ts run --spawn=14
+```

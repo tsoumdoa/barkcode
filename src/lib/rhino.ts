@@ -1,24 +1,25 @@
 import chalk from "chalk";
 import { platform } from "os";
-import { join } from "path";
 import { RHINO_PATH } from "../constants";
 import { isRhinocodeAvailable } from "./rhinocode";
+import { listRhinoInstancesJson } from "./rhinocode-schemas";
 import { displayError, displayInfo, displayWarning, displaySuccess } from "./logger";
+import { POLL_INTERVAL_MS, MAX_WAIT_MS, MAX_RETRIES, DEFAULT_SPAWN_DELAY_MS } from "./spawn-constants";
 
 export function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function isRhinoRunning(): Promise<{ running: boolean; output: string }> {
-	const proc = Bun.spawn(["rhinocode", "list"], {
-		stdout: "pipe",
-		stderr: "ignore",
-	});
-	const output = await new Response(proc.stdout).text();
-	return { running: output.includes("rhinocode_remotepipe"), output };
+	try {
+		const instances = await listRhinoInstancesJson();
+		return { running: instances.length > 0, output: JSON.stringify(instances) };
+	} catch {
+		return { running: false, output: "" };
+	}
 }
 
-export function createRhinoRunner(rhinoPath: string, spawnCount: number = 1) {
+export function createRhinoRunner(rhinoPath: string) {
 	return {
 		async checkRhinoOrExit() {
 			displayInfo("Checking for Rhino 8...");
@@ -34,18 +35,60 @@ export function createRhinoRunner(rhinoPath: string, spawnCount: number = 1) {
 			}
 			displaySuccess("Rhino 8 found.\n");
 		},
-		spawnRhino(count: number) {
-			for (let i = 0; i < count; i++) {
-				Bun.spawn(
-					[RHINO_PATH, "/nosplash", '/runscript="_StartScriptServer"'],
-					{
-						stdout: "ignore",
-						stderr: "ignore",
-						stdin: "ignore",
-						windowsVerbatimArguments: true,
-					},
-				);
+		async spawnRhino(count: number, delayMs?: number): Promise<{ pipeIds: string[]; spawnElapsedMs: number }> {
+			const startTime = Date.now();
+			const initialInstances = await listRhinoInstancesJson();
+			const initialCount = initialInstances.length;
+
+			const spawn = async (needed: number): Promise<void> => {
+				for (let i = 0; i < needed; i++) {
+					console.log(chalk.gray(`  Spawning ${i + 1}/${needed} instance(s)...`));
+					Bun.spawn(
+						[RHINO_PATH, "/nosplash", '/runscript="_StartScriptServer"'],
+						{
+							stdout: "ignore",
+							stderr: "ignore",
+							stdin: "ignore",
+							windowsVerbatimArguments: true,
+						},
+					);
+					if (needed > 1) {
+						console.log(chalk.gray(`  Waiting ${delayMs ?? DEFAULT_SPAWN_DELAY_MS}ms before next spawn...`));
+						await delay(delayMs ?? DEFAULT_SPAWN_DELAY_MS);
+					}
+				}
+			};
+
+			const getSpawnedCount = async (): Promise<number> => {
+				const currentInstances = await listRhinoInstancesJson();
+				return currentInstances.length - initialCount;
+			};
+
+			await spawn(count);
+			const spawnEndTime = Date.now();
+			const spawnElapsed = spawnEndTime - startTime;
+
+			for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+				for (let elapsed = POLL_INTERVAL_MS; elapsed <= MAX_WAIT_MS; elapsed += POLL_INTERVAL_MS) {
+					await delay(POLL_INTERVAL_MS);
+					const spawned = await getSpawnedCount();
+					if (spawned >= count) {
+						const currentInstances = await listRhinoInstancesJson();
+						return { pipeIds: currentInstances.map((i) => i.pipeId), spawnElapsedMs: spawnElapsed };
+					}
+					console.log(chalk.gray(`  [${elapsed / 1000}s] ${spawned}/${count} instances running...`));
+				}
+
+				const spawned = await getSpawnedCount();
+				const missing = count - spawned;
+				if (missing > 0) {
+					console.log(chalk.gray(`  Attempt ${attempt + 1}/${MAX_RETRIES}: ${spawned}/${count} running. Retrying ${missing}...`));
+					await spawn(missing);
+				}
 			}
+
+			const finalCount = await getSpawnedCount();
+			throw new Error(`Failed to spawn ${count} Rhino instances after ${MAX_RETRIES + 1} attempts (${finalCount}/${count})`);
 		},
 		async checkRhinocodeOrExit(): Promise<void> {
 			displayInfo("Checking for rhinocode...");
@@ -58,36 +101,18 @@ export function createRhinoRunner(rhinoPath: string, spawnCount: number = 1) {
 			displaySuccess("rhinocode found.");
 		},
 		getRunningProcesses: async () => {
-			const { output } = await isRhinoRunning();
-			if (!output.trim()) return [""];
-			const lines = output.trim().split("\n").slice(1);
-			return lines
-				.map((line) => {
-					const parts = line.trim().split(/\s+/);
-					if (parts.length >= 2) {
-						return parts[1];
-					}
-					return null;
-				})
-				.filter((p): p is string => p !== null);
+			const instances = await listRhinoInstancesJson();
+			if (instances.length === 0) return [];
+			return instances.map((i) => i.pipeId);
 		},
 		waitForRhinoInstances,
 	};
 }
 
 async function getRunningProcessesReal(): Promise<string[]> {
-	const { output } = await isRhinoRunning();
-	if (!output.trim()) return [""];
-	const lines = output.trim().split("\n").slice(1);
-	return lines
-		.map((line) => {
-			const parts = line.trim().split(/\s+/);
-			if (parts.length >= 2) {
-				return parts[1];
-			}
-			return null;
-		})
-		.filter((p): p is string => p !== null);
+	const instances = await listRhinoInstancesJson();
+	if (instances.length === 0) return [];
+	return instances.map((i) => i.pipeId);
 }
 
 export async function waitForRhinoInstances(expectedCount: number): Promise<string[]> {
@@ -100,7 +125,7 @@ export async function waitForRhinoInstances(expectedCount: number): Promise<stri
 			),
 		);
 
-		if (currentCount === expectedCount) {
+		if (currentCount >= expectedCount) {
 			return processes;
 		}
 

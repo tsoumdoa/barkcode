@@ -1,35 +1,41 @@
-import { z } from "zod";
+import * as v from "valibot";
 
-export const BarkCommandSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string().optional(),
-  rhCommand: z.string(),
-  inputPattern: z.string(),
-  inputFolder: z.string(),
-  outputFolder: z.string(),
-  outputSuffix: z.string(),
-  pollIntervalMs: z.number().optional(),
+export const BarkCommandSchema = v.object({
+  id: v.string(),
+  name: v.string(),
+  description: v.optional(v.string()),
+  rhCommand: v.string(),
+  inputPattern: v.string(),
+  inputFolder: v.string(),
+  outputFolder: v.string(),
+  outputSuffix: v.string(),
+  pollIntervalMs: v.optional(v.number()),
 });
 
-export const BarkcodeConfigSchema = z.object({
-  version: z.literal("1.0"),
-  commands: z.array(BarkCommandSchema).min(1),
+export const BarkcodeConfigSchema = v.object({
+  version: v.literal("1.0"),
+  commands: v.pipe(v.array(BarkCommandSchema), v.minLength(1)),
 });
+
+export type BarkcodeConfig = v.InferOutput<typeof BarkcodeConfigSchema>;
 
 export function validateConfig(data: unknown): {
   success: boolean;
-  data?: z.infer<typeof BarkcodeConfigSchema>;
+  data?: BarkcodeConfig;
   error?: string;
 } {
-  const result = BarkcodeConfigSchema.safeParse(data);
+  const result = v.safeParse(BarkcodeConfigSchema, data);
+
   if (result.success) {
-    return { success: true, data: result.data };
+    return { success: true, data: result.output };
   }
 
-  const errors = result.error.issues.map((e: z.ZodIssue) => {
-    const path = e.path.join(".");
-    return `${path ? `${path}: ` : ""}${e.message}`;
+  const errors = result.issues.map((issue) => {
+    const path = (issue.path ?? [])
+      .map((entry) => String(entry.key))
+      .join(".");
+
+    return `${path ? `${path}: ` : ""}${issue.message}`;
   });
 
   return { success: false, error: errors.join("\n") };
