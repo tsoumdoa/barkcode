@@ -3,7 +3,7 @@ import { createRhinoRunner } from "../lib/rhino";
 import { RHINO_PATH } from "../constants";
 import { showCommandMenu } from "../lib/menu";
 import { processBatch, previewBatch, printBatchSummary } from "../lib/batch";
-import { displaySuccess, displayWarning, displayInfo, displayBold } from "../lib/logger";
+import { displaySuccess, displayWarning, displayInfo, displayBold, setDebugMode } from "../lib/logger";
 import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./start-helpers";
 
 export async function startRun(
@@ -12,6 +12,7 @@ export async function startRun(
 		config?: string;
 		command?: string;
 		dryRun?: boolean;
+		debug?: boolean;
 	} = {},
 ) {
 	const {
@@ -19,7 +20,11 @@ export async function startRun(
 		config: configPath,
 		command: commandName,
 		dryRun: isDryRun = false,
+		debug: isDebug = false,
 	} = options;
+
+	setDebugMode(isDebug);
+
 	const rhinoRunner = createRhinoRunner(RHINO_PATH, isDryRun, spawnCount);
 
 	if (isDryRun) {
@@ -71,5 +76,5 @@ export async function startRun(
 		}
 	}
 
-	displayInfo("\nExiting Barkcode. Rhino will remain open.");
+	displayInfo("\nExiting Barkcode. Please shut Rhino if it is still running.");
 }

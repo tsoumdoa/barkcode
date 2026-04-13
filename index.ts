@@ -22,12 +22,14 @@ async function main() {
     .option("-s, --spawn <count>", "Number of Rhino instances to start", "1")
     .option("-c, --config <path>", "Config file path")
     .option("-d, --dry-run", "Preview without executing")
+    .option("--debug", "Enable debug output")
     .action(async (commandId, options) => {
       await startRun({
         spawn: Number(options.spawn) || 1,
         config: options.config,
         command: commandId,
         dryRun: options.dryRun,
+        debug: options.debug,
       });
     });
 

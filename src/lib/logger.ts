@@ -1,7 +1,12 @@
 import chalk from "chalk";
 
+let _debugMode = false;
 let _progressActive = false;
 let _progressData: { current: number; total: number; fileName: string; elapsedMs: number } | null = null;
+
+export function setDebugMode(enabled: boolean) {
+	_debugMode = enabled;
+}
 
 function _eraseProgressLine() {
 	process.stdout.write("\r" + " ".repeat(120) + "\r");
@@ -131,6 +136,7 @@ export function displayTotal(message: string) {
 }
 
 export function displayDebug(context: string, message: string) {
+	if (!_debugMode) return;
 	if (_progressActive) _eraseProgressLine();
 	console.log(chalk.gray(`[${context}] ${message}`));
 	if (_progressActive) _redrawProgress();
