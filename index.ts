@@ -2,8 +2,8 @@
 
 import { Command } from "commander";
 import { logo } from "./src/logo";
-import { startRun } from "./src/commands/start";
-import { init } from "./src/commands/init";
+  import { run } from "./src/commands/run";
+  import { init } from "./src/commands/init";
 
 async function main() {
   logo();
@@ -23,7 +23,7 @@ async function main() {
     .option("-c, --config <path>", "Config file path")
     .option("--debug", "Enable debug output")
     .action(async (commandId, options) => {
-      await startRun({
+      await run({
         spawn: Number(options.spawn) || 1,
         config: options.config,
         command: commandId,
