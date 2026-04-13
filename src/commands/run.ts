@@ -4,9 +4,9 @@ import { RHINO_PATH } from "../constants";
 import { showCommandMenu } from "../lib/menu";
 import { processBatch, printBatchSummary } from "../lib/batch";
 import { displaySuccess, displayWarning, displayInfo, displayBold, setDebugMode } from "../lib/logger";
-import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./start-helpers";
+import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./run-helpers";
 
-export async function startRun(
+export async function run(
 	options: {
 		spawn?: number;
 		config?: string;
@@ -72,9 +72,9 @@ export async function startRun(
 			);
 
 			printBatchSummary(summary);
+			displayInfo("\nExiting Barkcode. Please shut Rhino if it is still running.");
 			process.exit(0);
 		}
 	}
 
-	displayInfo("\nExiting Barkcode. Please shut Rhino if it is still running.");
 }

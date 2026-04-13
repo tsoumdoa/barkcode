@@ -2,7 +2,7 @@ import { glob } from "glob";
 import { resolve, join } from "path";
 import type { BatchSummary, FileMapping, BarkCommand } from "../types";
 import { execute, closeAll } from "./rhinocode";
-import { displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug, displayProgress, flushProgress } from "./logger";
+import { displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug, displayProgress, flushProgress, displayWarning } from "./logger";
 
 export async function collectFiles(
 	inputFolder: string,
