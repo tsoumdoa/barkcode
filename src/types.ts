@@ -39,6 +39,7 @@ export type BatchSummary = {
   succeeded: number;
   failed: number;
   skipped: number;
+  durationMs: number;
 };
 
 export type FileMapping = {
