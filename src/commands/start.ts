@@ -37,6 +37,7 @@ export async function startRun(
 
 	if (commandName) {
 		await executeCommandIfRequested(commandName, config, projectRoot, instances);
+		process.exit(0);
 	}
 
 	displayInfo("\nPress Ctrl+C to exit\n");
@@ -71,6 +72,7 @@ export async function startRun(
 			);
 
 			printBatchSummary(summary);
+			process.exit(0);
 		}
 	}
 
