@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { resolve, join } from "path";
 import type { BatchSummary, FileMapping, BarkCommand } from "../types";
 import { execute, closeAll } from "./rhinocode";
-import { displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug } from "./logger";
+import { displayWarning, displayInfo, displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug, displayProgress, flushProgress } from "./logger";
 
 export async function collectFiles(
 	inputFolder: string,
@@ -37,6 +37,7 @@ export async function processBatch(
 	projectRoot: string,
 ): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
 	const { rhCommand } = command;
+	const batchStartTime = Date.now();
 
 	const mappings: FileMapping[] = inputFiles.map((inputPath, index) => ({
 		inputPath,
@@ -47,6 +48,7 @@ export async function processBatch(
 	const finalMappings: FileMapping[] = [];
 	let succeeded = 0;
 	let failed = 0;
+	let completedCount = 0;
 
 	const instanceBatches = new Map<string, FileMapping[]>();
 
@@ -72,6 +74,14 @@ export async function processBatch(
 			const batch = instanceBatches.get(instanceId) || [];
 			for (const mapping of batch) {
 				mapping.status = "processing";
+				const fileStartTime = Date.now();
+				displayProgress(
+					completedCount + 1,
+					inputFiles.length,
+					mapping.fileName,
+					"processing",
+					Date.now() - batchStartTime,
+				);
 				try {
 					const result = await execute(
 						mapping.inputPath,
@@ -79,23 +89,48 @@ export async function processBatch(
 						command,
 						projectRoot,
 					);
+					const fileElapsed = Date.now() - fileStartTime;
 					if (result.success) {
 						mapping.status = "success";
 						succeeded++;
+						displayProgress(
+							completedCount + 1,
+							inputFiles.length,
+							mapping.fileName,
+							"success",
+							fileElapsed,
+						);
 					} else {
 						mapping.status = "failed";
 						mapping.error = result.error;
 						failed++;
+						displayProgress(
+							completedCount + 1,
+							inputFiles.length,
+							mapping.fileName,
+							"failed",
+							fileElapsed,
+						);
 					}
 				} catch (e) {
+					const fileElapsed = Date.now() - fileStartTime;
 					mapping.status = "failed";
 					mapping.error = (e as Error).message;
 					failed++;
+					displayProgress(
+						completedCount + 1,
+						inputFiles.length,
+						mapping.fileName,
+						"failed",
+						fileElapsed,
+					);
 				}
+				completedCount++;
 				finalMappings.push(mapping);
 			}
 		}),
 	);
+	flushProgress();
 	displayDebug("processBatch", "all instances finished processing");
 	await closeAll();
 
