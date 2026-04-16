@@ -3,7 +3,7 @@ import { createRhinoRunner } from "../lib/rhino";
 import { RHINO_PATH, DEFAULT_SPAWN_COUNT, MAX_SPAWN_COUNT_WARNING } from "../constants";
 import { showCommandMenu } from "../lib/menu";
 import { processBatch, printBatchSummary } from "../lib/batch";
-import { displaySuccess, displayWarning, displayInfo, displayBold, setDebugMode } from "../lib/logger";
+import { displaySuccess, displayWarning, displayInfo, displayBold, displayError, setDebugMode } from "../lib/logger";
 import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./run-helpers";
 
 export async function run(
@@ -62,6 +62,12 @@ export async function run(
 				continue;
 			}
 
+			const currentInstances = await rhinoRunner.getRunningProcesses();
+			if (currentInstances.length === 0) {
+				displayError("No Rhino instances running. Please restart Rhino with _StartScriptServer and try again.");
+				continue;
+			}
+
 			displayInfo(`  Found ${action.files.length} file(s)`);
 
 			const fileNamesWithoutExt = action.files.map((file) => {
@@ -73,7 +79,7 @@ export async function run(
 				action.command,
 				action.files,
 				fileNamesWithoutExt,
-				instances,
+				currentInstances,
 				projectRoot,
 			);
 

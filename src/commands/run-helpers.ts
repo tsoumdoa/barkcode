@@ -47,7 +47,8 @@ let spawnElapsedMs = 0;
 		displayWarning(
 			`On Mac, please manually open ${spawnCount} Rhino instance(s) and run the _StartScriptServer command in each.\n`,
 		);
-		displayInfo("Waiting for user to start Rhino instances...\n");
+		displayInfo("Waiting for Rhino instances to be ready...\n");
+		instances = await rhinoRunner.waitForRhinoInstances(spawnCount);
 	} else if (p === "win32") {
 		displayInfo("Launching Rhino 8...");
 		try {

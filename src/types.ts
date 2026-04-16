@@ -14,6 +14,7 @@ export type BarkCommand = {
   inputPattern: string;
   inputFolder: string;
   outputFolder: string;
+  outputName: string;
   outputSuffix: string;
   pollIntervalMs?: number;
 };
