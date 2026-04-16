@@ -1,11 +1,23 @@
 import chalk from "chalk";
 import { spawn } from "child_process";
 import { existsSync } from "fs";
-import { join, sep } from "path";
+import { resolve } from "path";
 import type { RhinoInstance, CommandResult, BarkCommand } from "../types";
 import { DEFAULT_TIMEOUT } from "../constants";
 import { displayInfo, displayDebug } from "./logger";
 import { listRhinoInstancesJson } from "./rhinocode-schemas";
+
+export function buildOutputPath(
+	outputFolder: string,
+	outputName: string,
+	outputSuffix: string,
+	fileName: string,
+	projectRoot: string,
+): string {
+	const outputNameReplaced = outputName.replace(/{{fileName}}/g, fileName);
+	const fullFileName = `${outputNameReplaced}.${outputSuffix}`;
+	return resolve(projectRoot, outputFolder, fullFileName);
+}
 
 export async function pollForFile(
 	filePath: string,
@@ -53,8 +65,21 @@ export async function execute(
 	const pollInterval = command.pollIntervalMs ?? 500;
 	const startTime = Date.now();
 
-	let replacedCommand = command.rhCommand.replace(/{{fileName}}/g, fileName);
-	replacedCommand = replacedCommand.replace(/\.\//g, projectRoot + sep);
+	if (!command.rhCommand.includes("{{path}}")) {
+		throw new Error("rhCommand must contain {{path}} placeholder");
+	}
+
+	const outputPath = buildOutputPath(
+		command.outputFolder,
+		command.outputName,
+		command.outputSuffix,
+		fileName,
+		projectRoot,
+	);
+
+	let replacedCommand = command.rhCommand
+		.replace(/{{path}}/g, outputPath)
+		.replace(/{{fileName}}/g, fileName);
 
 	const rhinoArg = instanceId ? ["--rhino", instanceId] : [];
 	const openArgs = [...rhinoArg, "command", '-_open', `"${inputFile}"`];
@@ -75,8 +100,6 @@ export async function execute(
 
 			cmdProc.on("close", (cmdCode) => {
 				displayDebug("rhinocode", `command executed with code: ${cmdCode}`);
-
-				const outputPath = join(command.outputFolder, fileName + "." + command.outputSuffix);
 				displayDebug("rhinocode", `polling for export: ${outputPath}`);
 
 				(async () => {

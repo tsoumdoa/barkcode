@@ -8,6 +8,7 @@ export const BarkCommandSchema = v.object({
   inputPattern: v.string(),
   inputFolder: v.string(),
   outputFolder: v.string(),
+  outputName: v.string(),
   outputSuffix: v.string(),
   pollIntervalMs: v.optional(v.number()),
 });
