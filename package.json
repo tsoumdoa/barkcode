@@ -11,6 +11,7 @@
     "tinybench": "^6.0.0"
   },
   "scripts": {
+    "test": "bun test",
     "benchmark": "bun run index.ts benchmark"
   },
   "peerDependencies": {

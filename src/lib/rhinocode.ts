@@ -78,8 +78,8 @@ export async function execute(
 	);
 
 	let replacedCommand = command.rhCommand
-		.replace(/{{path}}/g, outputPath)
-		.replace(/{{fileName}}/g, fileName);
+		.replace(/{{path}}/g, `"${outputPath}"`)
+		.replace(/{{fileName}}/g, `"${fileName}"`);
 
 	const rhinoArg = instanceId ? ["--rhino", instanceId] : [];
 	const openArgs = [...rhinoArg, "command", '-_open', `"${inputFile}"`];

@@ -1,14 +1,15 @@
 import * as v from "valibot";
+import { FileNameValidator, FolderPathValidator, RhinoCommandValidator } from "./lib/sanitize";
 
 export const BarkCommandSchema = v.object({
   id: v.string(),
   name: v.string(),
   description: v.optional(v.string()),
-  rhCommand: v.string(),
+  rhCommand: RhinoCommandValidator,
   inputPattern: v.string(),
-  inputFolder: v.string(),
-  outputFolder: v.string(),
-  outputName: v.string(),
+  inputFolder: FolderPathValidator,
+  outputFolder: FolderPathValidator,
+  outputName: FileNameValidator,
   outputSuffix: v.string(),
   pollIntervalMs: v.optional(v.number()),
 });
