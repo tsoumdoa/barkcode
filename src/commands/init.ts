@@ -18,6 +18,16 @@ const DEFAULT_CONFIG: BarkcodeConfig = {
 			inputFolder: "./test/5",
 			outputFolder: "./test/converted",
 		},
+		{
+			id: "convert:rh6",
+			name: "Save as Rhino6",
+			description: "Convert all 3DM files to STEP format",
+			rhCommand: '_-SaveAs _Version=6 "./test/converted/{{fileName}}_rh6.3dm" _Enter _Enter',
+			inputPattern: "*.3dm",
+			outputSuffix: "3dm",
+			inputFolder: "./test/5",
+			outputFolder: "./test/converted",
+		},
 	],
 };
 
