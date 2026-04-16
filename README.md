@@ -13,12 +13,15 @@ BarkCode is an open-source CLI tool for batch-processing Rhino 3DM files. It spa
 
 ### Setup
 
-Since BarkCode is not published to npm, install it from source:
+**Important:** Use the `0.1.x` branch for the stable release.
 
 ```bash
 # Clone the repository
 git clone <repo-url>
 cd barkcode
+
+# Checkout stable release branch
+git checkout 0.1.x
 
 # Install dependencies
 bun install
