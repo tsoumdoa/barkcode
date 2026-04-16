@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import { basename } from "path";
 import { getCommand, loadConfig } from "../lib/config";
 import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
@@ -29,8 +30,11 @@ export async function loadConfigOrExit(options: { configPath?: string }) {
 export async function ensureRhinoInstances(
 	rhinoRunner: ReturnType<typeof createRhinoRunner>,
 	spawnCount: number,
+	spawnDelay?: number,
 ) {
-	if (platform() === "darwin" && spawnCount > 1) {
+	const p = platform();
+let spawnElapsedMs = 0;
+	if (p === "darwin" && spawnCount > 1) {
 		displayWarning(
 			"On Mac, Rhino only allows one instance. Using --spawn=1.\n",
 		);
@@ -39,23 +43,31 @@ export async function ensureRhinoInstances(
 
 	let instances = await rhinoRunner.getRunningProcesses();
 
-	if (instances.length < spawnCount) {
-		if (platform() === "darwin") {
-			displayWarning(
-				`On Mac, please manually open ${spawnCount} Rhino instance(s) and run the _StartScriptServer command in each.\n`,
-			);
-			displayInfo("Waiting for user to start Rhino instances...\n");
-		} else {
-			displayInfo("Launching Rhino 8...");
-			rhinoRunner.spawnRhino(spawnCount - instances.length);
+	if (p === "darwin" && instances.length === 0) {
+		displayWarning(
+			`On Mac, please manually open ${spawnCount} Rhino instance(s) and run the _StartScriptServer command in each.\n`,
+		);
+		displayInfo("Waiting for user to start Rhino instances...\n");
+	} else if (p === "win32") {
+		displayInfo("Launching Rhino 8...");
+		try {
+			const result = await rhinoRunner.spawnRhino(spawnCount, spawnDelay);
+			instances = result.pipeIds;
+			spawnElapsedMs = result.spawnElapsedMs;
+		} catch (e) {
+			displayError((e as Error).message);
+			process.exit(1);
 		}
-		instances = await rhinoRunner.waitForRhinoInstances(spawnCount);
-		instances.forEach((instance) => {
-			displaySuccess(`Connected to Rhino ${instance}\n`);
-		});
+	}
+	instances.forEach((instance) => {
+		displaySuccess(`Connected to Rhino ${instance}`);
+	});
+
+	if (spawnElapsedMs > 0) {
+		displayInfo(`Spawned and connected to ${instances.length} instance(s) in ${(spawnElapsedMs / 1000).toFixed(1)}s`);
 	}
 
-	return instances;
+	return { pipeIds: instances, spawnElapsedMs };
 }
 
 export async function executeCommandIfRequested(

@@ -1,3 +1,6 @@
+import * as v from "valibot";
+import { InferOutput } from "valibot";
+
 export type BarkcodeConfig = {
   version: "1.0";
   commands: BarkCommand[];
@@ -57,3 +60,29 @@ export type ConfigLoadOptions = {
 export type MenuAction =
   | { type: "exit" }
   | { type: "run"; command: BarkCommand; files: string[] };
+
+
+
+const ActiveDocSchema = v.object({
+	title: v.string(),
+	location: v.string(),
+});
+
+const RhinoStatusMetaSchema = v.object({
+	version: v.string(),
+});
+
+const RhinoStatusSchema = v.object({
+	pipeId: v.string(),
+	processId: v.number(),
+	processName: v.string(),
+	processVersion: v.string(),
+	processAge: v.number(),
+	activeDoc: v.nullable(ActiveDocSchema),
+	activeViewport: v.nullable(v.string()),
+	$meta: RhinoStatusMetaSchema,
+	$type: v.literal("status"),
+});
+
+export const RhinoInstanceListSchema = v.array(RhinoStatusSchema);
+export type RhinoInstanceJson = InferOutput<typeof RhinoStatusSchema>;
