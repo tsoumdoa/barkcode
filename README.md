@@ -27,14 +27,14 @@ git checkout 0.1.x
 bun install
 
 # Link globally so `barkcode` command is available
-npm link
+bun link
 ```
 
 After linking, the `barkcode` CLI will be available system-wide.
 
 To uninstall:
 ```bash
-npm unlink
+bun unlink
 ```
 
 ## Overview
