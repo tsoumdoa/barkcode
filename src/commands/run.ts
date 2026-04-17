@@ -4,7 +4,7 @@ import { RHINO_PATH, DEFAULT_SPAWN_COUNT, MAX_SPAWN_COUNT_WARNING } from "../con
 import { showCommandMenu } from "../lib/menu";
 import { processBatch, printBatchSummary } from "../lib/batch";
 import { displaySuccess, displayWarning, displayInfo, displayBold, displayError, setDebugMode } from "../lib/logger";
-import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested } from "./run-helpers";
+import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested, ensureOutputFolder } from "./run-helpers";
 
 export async function run(
 	options: {
@@ -69,6 +69,8 @@ export async function run(
 			}
 
 			displayInfo(`  Found ${action.files.length} file(s)`);
+
+			await ensureOutputFolder(action.command.outputFolder, projectRoot);
 
 			const fileNamesWithoutExt = action.files.map((file) => {
 				const fileName = basename(file);

@@ -1,5 +1,7 @@
 import chalk from "chalk";
-import { basename } from "path";
+import { basename, resolve } from "path";
+import { existsSync, mkdirSync } from "fs";
+import { confirm } from "@inquirer/prompts";
 import { getCommand, loadConfig } from "../lib/config";
 import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
 import {
@@ -102,6 +104,8 @@ export async function executeCommandIfRequested(
 
 	displayInfo(`Found ${files.length} file(s)\n`);
 
+	await ensureOutputFolder(command.outputFolder, projectRoot);
+
 	const { summary } = await processBatch(
 		command,
 		files,
@@ -111,4 +115,27 @@ export async function executeCommandIfRequested(
 	);
 
 	printBatchSummary(summary);
+}
+
+export async function ensureOutputFolder(
+	outputFolder: string,
+	projectRoot: string,
+): Promise<void> {
+	const fullPath = resolve(projectRoot, outputFolder);
+
+	if (existsSync(fullPath)) return;
+
+	displayWarning(`Output folder does not exist: ${fullPath}`);
+	const shouldCreate = await confirm({
+		message: "Create this folder?",
+		default: true,
+	});
+
+	if (shouldCreate) {
+		mkdirSync(fullPath, { recursive: true });
+		displaySuccess(`Created output folder: ${fullPath}`);
+	} else {
+		displayInfo("Aborted.");
+		process.exit(0);
+	}
 }
