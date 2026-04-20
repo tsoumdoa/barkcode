@@ -15,5 +15,10 @@ export function printUsage() {
       chalk.cyan("init      ") +
       chalk.gray("Initialize a new project"),
   );
+  console.log(
+    chalk.gray("  ") +
+      chalk.cyan("command   ") +
+      chalk.gray("Run a Rhino command (manages Rhino lifecycle)"),
+  );
   console.log();
 }

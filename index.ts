@@ -5,6 +5,7 @@ import { logo } from "./src/logo";
 import { run } from "./src/commands/run";
 import { init } from "./src/commands/init";
 import { benchmark } from "./src/commands/benchmark";
+import { runCommand } from "./src/commands/command";
 import { DEFAULT_SPAWN_DELAY_MS } from "./src/lib/spawn-constants";
 import { DEFAULT_SPAWN_COUNT } from "./src/constants";
 
@@ -42,6 +43,15 @@ async function main() {
     .option("-p, --path <path>", "Target directory")
     .option("-f, --force", "Overwrite existing config")
     .action((options) => init({ path: options.path, force: options.force }));
+
+  program
+    .command("command")
+    .description("Run a Rhino command (manages Rhino lifecycle automatically)")
+    .argument("<cmd>", "Rhino command string to execute")
+    .option("--debug", "Enable debug output")
+    .action(async (cmd, options) => {
+      await runCommand({ command: cmd, debug: options.debug });
+    });
 
   program
     .command("benchmark")
