@@ -37,6 +37,22 @@ To uninstall:
 bun unlink
 ```
 
+## Quick Usage
+
+```bash
+# Run an interactive menu to select a batch command
+barkcode run
+
+# Spawn 12 instances (win only, and default spawn count is 8)
+barkcode run --spawn=12
+
+# Run a specific command by ID (from barkcode.json)
+barkcode run convert:skp
+
+# Execute a Rhino macro directly (automatically spawn Rhino on Win)
+barkcode command "_Circle 0 5"
+```
+
 ## Overview
 
 BarkCode reads a `barkcode.json` configuration file that defines commands (e.g., convert 3DM to SketchUp format). Each command specifies:
