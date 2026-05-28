@@ -2,7 +2,7 @@ import { glob } from "glob";
 import { stat } from "fs/promises";
 import { resolve, join } from "path";
 import type { BatchSummary, FileMapping, BarkCommand } from "../types";
-import { execute, closeAll } from "./rhinocode";
+import { execute } from "./rhinocode";
 import { displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug, displayProgress, flushProgress, displayWarning } from "./logger";
 
 export async function collectFiles(
@@ -69,7 +69,6 @@ export async function processBatch(
 
 	flushProgress();
 	displayDebug("processBatch", "all instances finished processing");
-	closeAll();
 
 	const totalElapsed = Date.now() - batchStartTime;
 	const summary: BatchSummary = {

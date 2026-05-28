@@ -3,6 +3,7 @@ import { createRhinoRunner } from "../lib/rhino";
 import { RHINO_PATH, DEFAULT_SPAWN_COUNT, MAX_SPAWN_COUNT_WARNING } from "../constants";
 import { showCommandMenu } from "../lib/menu";
 import { processBatch, printBatchSummary } from "../lib/batch";
+import { closeAll } from "../lib/rhinocode";
 import { displaySuccess, displayWarning, displayInfo, displayBold, displayError, setDebugMode } from "../lib/logger";
 import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested, ensureOutputFolder } from "./run-helpers";
 
@@ -43,6 +44,18 @@ export async function run(
 
 	if (commandName) {
 		await executeCommandIfRequested(commandName, config, projectRoot, instances);
+		displayInfo("\nPlease verify the last export is complete in Rhino.");
+		displayInfo("Press Enter to close Barkcode and Rhino.");
+		
+		process.stdin.setRawMode(true);
+		await new Promise<void>((resolve) => {
+			process.stdin.on("data", () => resolve());
+			process.stdin.resume();
+		});
+		process.stdin.setRawMode(false);
+
+		displayInfo("Closing Barkcode and Rhino. Please wait.");
+		closeAll();
 		process.exit(0);
 	}
 
@@ -86,7 +99,18 @@ export async function run(
 			);
 
 			printBatchSummary(summary);
-			displayInfo("\nClosing Barkcode and Rhino. Please wait.");
+			displayInfo("\nPlease verify the last export is complete in Rhino.");
+			displayInfo("Press Enter to close Barkcode and Rhino.");
+			
+			process.stdin.setRawMode(true);
+			await new Promise<void>((resolve) => {
+				process.stdin.on("data", () => resolve());
+				process.stdin.resume();
+			});
+			process.stdin.setRawMode(false);
+
+			displayInfo("Closing Barkcode and Rhino. Please wait.");
+			closeAll();
 			process.exit(0);
 		}
 	}
