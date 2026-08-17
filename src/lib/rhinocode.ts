@@ -1,11 +1,10 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
-import type { BarkCommand, CommandResult } from "../types";
+import type { BarkCommand, CommandResult, RhinoInstanceJson } from "../types";
 import { DEFAULT_TIMEOUT } from "../constants";
 import { displayDebug } from "./logger";
 import {
 	discoverRhinoInstances,
-	type DiscoveryResult,
 	type RhinocodeProcessResult,
 	type RhinocodeRun,
 } from "./rhinocode-schemas";
@@ -39,7 +38,7 @@ export class RhinocodeClient {
 		this.run = run ?? ((args) => runRhinocodeProcess(executable, args));
 	}
 
-	list(): Promise<DiscoveryResult> {
+	list(): Promise<RhinoInstanceJson[]> {
 		return discoverRhinoInstances(this.run);
 	}
 

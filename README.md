@@ -94,7 +94,7 @@ On Windows, BarkCode starts each worker with:
 C:\Program Files\Rhino 8\System\Rhino.exe /nosplash /runscript="_StartScriptServer"
 ```
 
-One session tracks the active workers and the instances BarkCode can prove it started. Recovery replaces dead worker IDs through that same session. Automatic cleanup only quits proven BarkCode-owned instances. Reused and ambiguous Rhino sessions remain open.
+One session tracks active workers and the instances BarkCode started. Recovery replaces dead worker IDs through that same session. Automatic cleanup leaves reused or ambiguous Rhino sessions open. If macOS process discovery fails before launch, BarkCode treats the resulting session as reused.
 
 ### rhinocode CLI
 
@@ -114,7 +114,7 @@ BarkCode resolves `rhinocode` once for each session. It checks PATH first, then 
    - `rhinocode --rhino <id> -_open <file>` - Open the file
    - `rhinocode --rhino <id> command <rhCommand>` - Execute the command (e.g., `_SaveAs`)
    - `pollForFile()` - Wait for the output file to appear
-4. **Close**: After the command or menu exits, `_-Quit` is sent only to instances BarkCode proved it started
+4. **Close**: After the command or menu exits, `_-Quit` is sent only to instances BarkCode identified as started by the current session
 
 ## Project Structure
 
@@ -123,7 +123,7 @@ src/
 ├── main.ts                    # Entry point (bin: barkcode)
 ├── types.ts                   # Shared TypeScript types
 ├── schema.ts                  # barkcode.json validation schema
-├── constants.ts              # Rhino path, timeouts, defaults
+├── constants.ts              # Timeouts and defaults
 ├── logo.ts                    # ASCII logo display
 ├── usage.ts                   # CLI usage help
 │
@@ -242,145 +242,6 @@ Launches the interactive menu:
 #### `bark benchmark`
 
 Windows-only benchmark tool for testing spawn performance with different instance counts and delays.
-
-## Key Files Explained
-
-### src/lib/rhino.ts
-
-`RhinoSession` manages startup, worker recovery, and cleanup.
-
-```typescript
-session.ensureInstances({ requestedCount, spawnDelayMs })
-// Returns exactly effectiveCount pipe IDs.
-
-session.cleanupOwned()
-// Idempotent. Quits proven owned pipe IDs at most once.
-```
-
-The session prefers active worker IDs, then selects other healthy instances in stable process ID order. A successful empty discovery starts missing capacity. Process, exit, JSON, and schema failures remain distinct errors.
-
-Windows ownership uses direct child process IDs. macOS compares Rhino process IDs with a snapshot taken before launch. Pipes without enough ownership evidence are treated as reused and are never closed automatically.
-
-### src/lib/rhinocode.ts
-
-Core execution via `rhinocode` CLI.
-
-```typescript
-execute(client, inputFile, fileName, command, projectRoot, instanceId) → Promise<CommandResult>
-```
-
-1. Builds output path using `{{fileName}}` replacement
-2. Replaces `{{path}}` in `rhCommand` with quoted output path
-3. Spawns `rhinocode --rhino <id> -_open "<inputFile>"`
-4. On that process exit, spawns `rhinocode --rhino <id> command <replacedCommand>`
-5. Polls for output file existence (pollForFile)
-
-```typescript
-pollForFile(filePath, timeoutMs, intervalMs) → Promise<boolean>
-```
-
-Repeatedly checks if file exists until timeout.
-
-```typescript
-buildOutputPath(outputFolder, outputName, outputSuffix, fileName, projectRoot) → string
-```
-
-### src/lib/batch.ts
-
-Implements the parallel work queue.
-
-```typescript
-collectFiles(inputFolder, pattern, projectRoot) → string[]
-```
-
-Uses `glob` to find matching files, sorts by size (largest first).
-
-```typescript
-processBatch(client, command, inputFiles, fileNames, instanceIds, projectRoot) → { mappings, summary }
-```
-
-1. Maps files to track status (pending/processing/success/failed)
-2. `Promise.all()` across instanceIds - each instance runs a while-loop pulling files from `nextIndex++`
-3. Each file: execute() → update status → displayProgress()
-4. Returns `BatchSummary` with counts and duration. The owning `RhinoSession` handles cleanup.
-
-### src/lib/config.ts
-
-```typescript
-loadConfig(options?) → Promise<LoadedConfig>
-// Searches upward for barkcode.json, validates JSON against schema
-
-findConfig(startDir?, explicitPath?) → string | null
-// Walks up directory tree looking for barkcode.json
-
-getCommand(config, commandNameOrIndex) → BarkCommand
-// Lookup by id, name, or numeric index (1-based)
-```
-
-### src/lib/sanitize.ts
-
-Input validation using valibot custom validators:
-
-- `FileNameValidator` - Rejects paths separators, null bytes, illegal chars
-- `FolderPathValidator` - Rejects absolute paths, `..` traversal
-- `RhinoCommandValidator` - Rejects null bytes, newlines, quotes, backticks
-
-### src/lib/logger.ts
-
-Unified console output with progress bar support:
-
-```typescript
-displayProgress(current, total, fileName, status, elapsedMs);
-// Shows: [████████████░░░░] 5/10 50% | ▓ filename (1m 23s)
-// Status "processing" updates the bar; "success"/"failed" replaces it with ✓/✗
-
-displayDebug(context, message);
-// Only prints if setDebugMode(true) was called
-
-flushProgress();
-// Erases the progress bar line from terminal
-```
-
-### src/lib/menu.ts
-
-Uses `@inquirer/prompts` select for interactive command choice. On selection, calls `collectFiles()` and returns `MenuAction: { type: "run", command, files }` or `{ type: "exit" }`.
-
-### src/commands/run.ts
-
-Main entry point for `bark run`:
-
-1. Parse CLI options
-2. Create one `RhinoSession`, then verify Rhino and rhinocode
-3. Load config
-4. Ask the session for the requested worker capacity
-5. If `--command` flag: run it directly, exit
-6. Else: enter `showCommandMenu()` loop until exit
-
-### src/commands/run-helpers.ts
-
-```typescript
-loadConfigOrExit(options?) → LoadedConfig
-// Wraps loadConfig() with a direct CLI error
-
-ensureRhinoInstances(session, spawnCount, delay?) → EnsureRhinoResult
-// Delegates startup and selection to the command's RhinoSession
-// Shows connected instance IDs
-
-executeCommandIfRequested(client, commandName, config, projectRoot, instances)
-// Used by --command flag to run non-interactively
-```
-
-### src/commands/benchmark.ts
-
-Uses `tinybench` to benchmark spawn performance:
-
-- Spawns N instances with M ms delay
-- Measures elapsed time
-- Results: ops/sec, avg/min/max latency per configuration
-
-### src/commands/init.ts
-
-Scaffolds barkcode.json with two default commands (SKP conversion, Rhino6 format).
 
 ## CLI Options Reference
 

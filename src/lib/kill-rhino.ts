@@ -16,7 +16,10 @@ export async function killRhinoInstances(client: RhinocodeClient, instances: Rhi
 
 	for (let elapsed = 0; elapsed <= 2000; elapsed += 100) {
 		await delay(100);
-		const remaining = await client.list();
-		if (remaining.kind === "ok" && remaining.instances.length === 0) return;
+		try {
+			if ((await client.list()).length === 0) return;
+		} catch {
+			// Keep polling through transient discovery failures.
+		}
 	}
 }

@@ -4,7 +4,7 @@ import { discoverRhinoInstances } from "./rhinocode-schemas";
 describe("Rhino discovery", () => {
 	it("keeps a successful empty list distinct from failures", async () => {
 		const result = await discoverRhinoInstances(async () => ({ exitCode: 0, stdout: "[]", stderr: "" }));
-		expect(result).toEqual({ kind: "ok", instances: [] });
+		expect(result).toEqual([]);
 	});
 
 	it.each([
@@ -13,8 +13,6 @@ describe("Rhino discovery", () => {
 		["json", async () => ({ exitCode: 0, stdout: "not json", stderr: "" })],
 		["schema", async () => ({ exitCode: 0, stdout: JSON.stringify([{ pipeId: 4 }]), stderr: "" })],
 	] as const)("returns a typed %s error", async (kind, run) => {
-		const result = await discoverRhinoInstances(run);
-		expect(result.kind).toBe("error");
-		if (result.kind === "error") expect(result.error.kind).toBe(kind);
+		await expect(discoverRhinoInstances(run)).rejects.toMatchObject({ kind });
 	});
 });

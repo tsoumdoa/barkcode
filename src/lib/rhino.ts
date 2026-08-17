@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { existsSync } from "fs";
 import type { RhinoInstanceJson } from "../types";
-import { displayDebug } from "./logger";
+import { displayDebug, displayWarning } from "./logger";
 import {
 	assertRhinoInstalled,
 	getRhinoPlatformConfig,
@@ -9,36 +9,13 @@ import {
 	type RhinoPlatformConfig,
 } from "./rhino-platform";
 import { RhinocodeClient } from "./rhinocode";
-import { type RhinoDiscoveryError } from "./rhinocode-schemas";
 import { DEFAULT_SPAWN_DELAY_MS, MAX_WAIT_MS, POLL_INTERVAL_MS } from "./spawn-constants";
 
 export type EnsureRhinoResult = {
-	effectiveCount: number;
 	pipeIds: string[];
 	launchedPipeIds: string[];
-	reusedPipeIds: string[];
 	spawnElapsedMs: number;
 };
-
-export type RhinoSessionState = {
-	activePipeIds: Set<string>;
-	ownedPipeIds: Set<string>;
-	cleanedPipeIds: Set<string>;
-};
-
-export class RhinoLaunchError extends Error {
-	constructor(message: string, options: { cause?: unknown } = {}) {
-		super(message, options);
-		this.name = "RhinoLaunchError";
-	}
-}
-
-export class RhinoReadinessError extends Error {
-	constructor(message: string, options: { cause?: unknown } = {}) {
-		super(message, options);
-		this.name = "RhinoReadinessError";
-	}
-}
 
 type LaunchProcess = (
 	command: string,
@@ -51,7 +28,8 @@ export type RhinoSessionDependencies = {
 	sleep: (ms: number) => Promise<void>;
 	exists: (path: string) => boolean;
 	launch: LaunchProcess;
-	listRhinoProcessIds: (config: RhinoPlatformConfig) => Promise<Set<number>>;
+	listRhinoProcessIds: (config: RhinoPlatformConfig) => Promise<Set<number> | undefined>;
+	terminateProcess: (pid: number) => Promise<void>;
 	pollIntervalMs: number;
 	maxWaitMs: number;
 };
@@ -61,27 +39,27 @@ const defaultDependencies: RhinoSessionDependencies = {
 	sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
 	exists: existsSync,
 	launch: async (command, args, config) => {
-		try {
-			const proc = Bun.spawn([command, ...args], {
-				stdout: "ignore",
-				stderr: "ignore",
-				stdin: "ignore",
-				windowsVerbatimArguments: config.platform === "win32",
-			});
-			return { pid: proc.pid };
-		} catch (cause) {
-			throw new RhinoLaunchError(`Failed to launch Rhino with ${command}.`, { cause });
-		}
+		const proc = Bun.spawn([command, ...args], {
+			stdout: "ignore",
+			stderr: "ignore",
+			stdin: "ignore",
+			windowsVerbatimArguments: config.platform === "win32",
+		});
+		return { pid: proc.pid };
 	},
 	listRhinoProcessIds: async (config) => {
-		if (config.platform !== "darwin") return new Set<number>();
+		if (config.platform !== "darwin") return undefined;
 		try {
 			const proc = Bun.spawn(["/usr/bin/pgrep", "-x", config.processName], {
 				stdout: "pipe",
 				stderr: "ignore",
 			});
-			const output = await new Response(proc.stdout).text();
-			await proc.exited;
+			const [output, exitCode] = await Promise.all([
+				new Response(proc.stdout).text(),
+				proc.exited,
+			]);
+			if (exitCode === 1) return new Set<number>();
+			if (exitCode !== 0) return undefined;
 			return new Set(
 				output
 					.split(/\s+/)
@@ -90,21 +68,26 @@ const defaultDependencies: RhinoSessionDependencies = {
 					.filter(Number.isInteger),
 			);
 		} catch {
-			return new Set<number>();
+			return undefined;
 		}
+	},
+	terminateProcess: async (pid) => {
+		const command = ["taskkill", "/PID", String(pid), "/T", "/F"];
+		const exitCode = await Bun.spawn(command, {
+			stdout: "ignore",
+			stderr: "ignore",
+		}).exited;
+		if (exitCode !== 0) throw new Error(`${command[0]} exited with code ${exitCode}.`);
 	},
 	pollIntervalMs: POLL_INTERVAL_MS,
 	maxWaitMs: MAX_WAIT_MS,
 };
 
 export class RhinoSession {
-	readonly state: RhinoSessionState = {
-		activePipeIds: new Set(),
-		ownedPipeIds: new Set(),
-		cleanedPipeIds: new Set(),
-	};
-
 	private readonly dependencies: RhinoSessionDependencies;
+	private activePipeIds = new Set<string>();
+	private readonly ownedPipes = new Map<string, number>();
+	private readonly ownedProcessIds = new Set<number>();
 	private cleanupPromise?: Promise<void>;
 
 	constructor(
@@ -127,90 +110,93 @@ export class RhinoSession {
 		assertRhinoInstalled(this.config, this.dependencies.exists);
 		const effectiveCount = Math.min(requestedCount, this.config.maxInstances);
 		const initial = await this.client.list();
-		if (initial.kind === "error") throw initial.error;
 
-		let selected = this.selectInstances(initial.instances, effectiveCount);
+		let selected = this.selectInstances(initial, effectiveCount);
 		if (selected.length === effectiveCount) {
-			return this.recordSelection(selected, effectiveCount, 0);
+			return this.recordSelection(selected, 0);
 		}
 
 		const missingCount = effectiveCount - selected.length;
 		const launchStartedAt = this.dependencies.now();
 		const preLaunchRhinoPids = this.config.platform === "darwin"
 			? await this.dependencies.listRhinoProcessIds(this.config)
-			: new Set<number>();
-		const directChildPids = new Set<number>();
+			: undefined;
 		const spawnDelayMs = options.spawnDelayMs ?? DEFAULT_SPAWN_DELAY_MS;
 
 		for (let index = 0; index < missingCount; index++) {
 			console.log(chalk.gray(`  Starting Rhino ${index + 1}/${missingCount}...`));
-			let launched: { pid?: number };
 			try {
-				launched = await this.dependencies.launch(
+				const launched = await this.dependencies.launch(
 					this.config.launchCommand,
 					[...this.config.launchArgs],
 					this.config,
 				);
+				if (this.config.platform === "win32" && launched.pid !== undefined) {
+					this.ownedProcessIds.add(launched.pid);
+				}
 			} catch (cause) {
-				if (cause instanceof RhinoLaunchError) throw cause;
-				throw new RhinoLaunchError(`Failed to launch Rhino with ${this.config.launchCommand}.`, { cause });
-			}
-			if (this.config.platform === "win32" && launched.pid !== undefined) {
-				directChildPids.add(launched.pid);
+				throw new Error(`Failed to launch Rhino with ${this.config.launchCommand}.`, { cause });
 			}
 			if (index < missingCount - 1) await this.dependencies.sleep(spawnDelayMs);
 		}
 
-		let lastDiscoveryError: RhinoDiscoveryError | undefined;
-		while (this.dependencies.now() - launchStartedAt < this.dependencies.maxWaitMs) {
+		const readinessStartedAt = this.dependencies.now();
+		let lastDiscoveryError: unknown;
+		while (this.dependencies.now() - readinessStartedAt < this.dependencies.maxWaitMs) {
 			await this.dependencies.sleep(this.dependencies.pollIntervalMs);
-			const discovery = await this.client.list();
-			if (discovery.kind === "error") {
-				lastDiscoveryError = discovery.error;
-				displayDebug("rhino", `readiness discovery failed: ${discovery.error.message}`);
+			let instances: RhinoInstanceJson[];
+			try {
+				instances = await this.client.list();
+			} catch (error) {
+				lastDiscoveryError = error;
+				displayDebug("rhino", `readiness discovery failed: ${(error as Error).message}`);
 				continue;
 			}
 
-			this.recordProvenOwnership(discovery.instances, directChildPids, preLaunchRhinoPids);
-			selected = this.selectInstances(discovery.instances, effectiveCount);
+			this.recordOwnedInstances(instances, this.ownedProcessIds, preLaunchRhinoPids);
+			selected = this.selectInstances(instances, effectiveCount);
 			if (selected.length === effectiveCount) {
-				return this.recordSelection(
-					selected,
-					effectiveCount,
-					this.dependencies.now() - launchStartedAt,
-				);
+				return this.recordSelection(selected, this.dependencies.now() - launchStartedAt);
 			}
 		}
 
-		const existingMacHint = this.config.platform === "darwin" && preLaunchRhinoPids.size > 0
+		const existingMacHint = this.config.platform === "darwin" && preLaunchRhinoPids && preLaunchRhinoPids.size > 0
 			? " Rhino may already be open without its script server. Run _StartScriptServer once or add it to Rhino's startup commands."
 			: "";
-		throw new RhinoReadinessError(
+		throw new Error(
 			`Rhino did not expose ${effectiveCount} ready instance(s) within ${this.dependencies.maxWaitMs}ms.${existingMacHint}`,
 			{ cause: lastDiscoveryError },
 		);
 	}
 
 	async quitInstance(pipeId: string): Promise<void> {
-		if (this.state.cleanedPipeIds.has(pipeId)) return;
-		this.state.cleanedPipeIds.add(pipeId);
 		const exitCode = await this.client.quit(pipeId);
 		if (exitCode !== 0) throw new Error(`Failed to quit Rhino ${pipeId}. rhinocode exited with code ${exitCode}.`);
+		this.forgetOwnedPipe(pipeId);
 	}
 
 	cleanupOwned(): Promise<void> {
 		if (this.cleanupPromise) return this.cleanupPromise;
 		this.cleanupPromise = (async () => {
-			for (const pipeId of this.state.ownedPipeIds) {
-				if (this.state.cleanedPipeIds.has(pipeId)) continue;
-				this.state.cleanedPipeIds.add(pipeId);
+			await this.refreshOwnedPipes();
+			for (const pipeId of this.ownedPipes.keys()) {
 				try {
-					await this.client.quit(pipeId);
+					await this.quitInstance(pipeId);
 				} catch (error) {
-					displayDebug("rhino", `cleanup failed for ${pipeId}: ${(error as Error).message}`);
+					displayWarning(`Failed to close Rhino ${pipeId}: ${(error as Error).message}`);
 				}
 			}
-		})();
+			for (const processId of [...this.ownedProcessIds]) {
+				try {
+					await this.dependencies.terminateProcess(processId);
+					this.forgetOwnedProcess(processId);
+				} catch (error) {
+					displayWarning(`Failed to stop Rhino process ${processId}: ${(error as Error).message}`);
+				}
+			}
+		})().finally(() => {
+			this.cleanupPromise = undefined;
+		});
 		return this.cleanupPromise;
 	}
 
@@ -218,7 +204,7 @@ export class RhinoSession {
 		const byPipeId = new Map(instances.map((instance) => [instance.pipeId, instance]));
 		const selected: RhinoInstanceJson[] = [];
 
-		for (const pipeId of this.state.activePipeIds) {
+		for (const pipeId of this.activePipeIds) {
 			const active = byPipeId.get(pipeId);
 			if (active) {
 				selected.push(active);
@@ -233,33 +219,55 @@ export class RhinoSession {
 		return [...selected, ...reusable].slice(0, count);
 	}
 
-	private recordProvenOwnership(
+	private recordOwnedInstances(
 		instances: RhinoInstanceJson[],
 		directChildPids: Set<number>,
-		preLaunchRhinoPids: Set<number>,
+		preLaunchRhinoPids: Set<number> | undefined,
 	): void {
 		for (const instance of instances) {
 			const owned = this.config.platform === "win32"
 				? directChildPids.has(instance.processId)
-				: !preLaunchRhinoPids.has(instance.processId);
-			if (owned) this.state.ownedPipeIds.add(instance.pipeId);
+				: preLaunchRhinoPids !== undefined && !preLaunchRhinoPids.has(instance.processId);
+			if (!owned) continue;
+			this.ownedPipes.set(instance.pipeId, instance.processId);
 		}
 	}
 
 	private recordSelection(
 		selected: RhinoInstanceJson[],
-		effectiveCount: number,
 		spawnElapsedMs: number,
 	): EnsureRhinoResult {
 		const pipeIds = selected.map((instance) => instance.pipeId);
-		this.state.activePipeIds = new Set(pipeIds);
+		this.activePipeIds = new Set(pipeIds);
 		return {
-			effectiveCount,
 			pipeIds,
-			launchedPipeIds: pipeIds.filter((pipeId) => this.state.ownedPipeIds.has(pipeId)),
-			reusedPipeIds: pipeIds.filter((pipeId) => !this.state.ownedPipeIds.has(pipeId)),
+			launchedPipeIds: pipeIds.filter((pipeId) => this.ownedPipes.has(pipeId)),
 			spawnElapsedMs,
 		};
+	}
+
+	private async refreshOwnedPipes(): Promise<void> {
+		if (this.ownedProcessIds.size === 0) return;
+		try {
+			const instances = await this.client.list();
+			this.recordOwnedInstances(instances, this.ownedProcessIds, undefined);
+		} catch (error) {
+			displayDebug("rhino", `cleanup discovery failed: ${(error as Error).message}`);
+		}
+	}
+
+	private forgetOwnedPipe(pipeId: string): void {
+		const processId = this.ownedPipes.get(pipeId);
+		this.ownedPipes.delete(pipeId);
+		if (processId !== undefined) this.ownedProcessIds.delete(processId);
+	}
+
+	private forgetOwnedProcess(processId: number): void {
+		this.ownedProcessIds.delete(processId);
+		for (const [pipeId, mappedProcessId] of this.ownedPipes) {
+			if (mappedProcessId !== processId) continue;
+			this.ownedPipes.delete(pipeId);
+		}
 	}
 }
 
@@ -271,7 +279,6 @@ export function createRhinoSession(options: {
 	dependencies?: Partial<RhinoSessionDependencies>;
 } = {}): RhinoSession {
 	const config = options.config ?? getRhinoPlatformConfig(options.platform);
-	assertRhinoInstalled(config, options.dependencies?.exists ?? existsSync);
 	const executable = options.rhinocodeExecutable ?? options.client?.executable ?? resolveRhinocodeExecutable(config);
 	const client = options.client ?? new RhinocodeClient(executable);
 	return new RhinoSession(config, client, options.dependencies);

@@ -39,7 +39,7 @@ export async function runCommand(options: {
 				process.exitCode = 1;
 			}
 
-			if (result.reusedPipeIds.includes(pipeId)) {
+			if (!result.launchedPipeIds.includes(pipeId)) {
 				const shouldQuit = await confirm({ message: "Quit the existing Rhino instance?", default: false });
 				if (shouldQuit) {
 					displayInfo("Quitting Rhino...");

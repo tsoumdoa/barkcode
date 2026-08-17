@@ -108,9 +108,7 @@ export async function benchmark(options: {
 			}, {
 				beforeEach: async function(this: Task) {
 					process.stdout.write(`\r\x1b[2K  ${this.name}  ${this.runs + 1}/${ITERATIONS}...`);
-					const discovery = await client.list();
-					if (discovery.kind === "error") throw discovery.error;
-					await killRhinoInstances(client, discovery.instances);
+					await killRhinoInstances(client, await client.list());
 				},
 			});
 		}

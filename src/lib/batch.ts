@@ -54,19 +54,10 @@ export async function processBatch(
 		status: "pending" as const,
 	}));
 
-	let succeeded = 0;
-	let failed = 0;
-	let completedCount = 0;
-
-
 	displayDebug("processBatch", `valid instances: ${instanceIds.join(", ")}`);
 
 	const stats = { succeeded: 0, failed: 0, completedCount: 0 };
 	await processBatchWorkQueue(client, command, mappings, instanceIds, projectRoot, batchStartTime, stats);
-
-	succeeded = stats.succeeded;
-	failed = stats.failed;
-	completedCount = stats.completedCount;
 
 	flushProgress();
 	displayDebug("processBatch", "all instances finished processing");
@@ -74,8 +65,8 @@ export async function processBatch(
 	const totalElapsed = Date.now() - batchStartTime;
 	const summary: BatchSummary = {
 		total: inputFiles.length,
-		succeeded,
-		failed,
+		succeeded: stats.succeeded,
+		failed: stats.failed,
 		skipped: 0,
 		durationMs: totalElapsed,
 	};
