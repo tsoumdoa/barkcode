@@ -54,7 +54,7 @@ export function getRhinoPlatformConfig(platformName: NodeJS.Platform = process.p
 			installationPath,
 			processName: "Rhinoceros",
 			launchCommand: "/usr/bin/open",
-			launchArgs: [installationPath, "--args", "-nosplash", "-runscript", "_StartScriptServer"],
+			launchArgs: [installationPath, "--args", "-nosplash"],
 			rhinocodeFallbacks: [`${installationPath}/Contents/Resources/bin/rhinocode`],
 			maxInstances: 1,
 		};

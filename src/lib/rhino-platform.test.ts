@@ -22,8 +22,6 @@ describe("Rhino platform configuration", () => {
 			"/Applications/Rhino 8.app",
 			"--args",
 			"-nosplash",
-			"-runscript",
-			"_StartScriptServer",
 		]);
 		expect(config.maxInstances).toBe(1);
 		expect(config.processName).toBe("Rhinoceros");

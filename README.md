@@ -83,10 +83,10 @@ Rhino instances are discovered with `rhinocode list --json`. Each instance has a
 On macOS, BarkCode starts Rhino with:
 
 ```text
-/usr/bin/open /Applications/Rhino 8.app --args -nosplash -runscript _StartScriptServer
+/usr/bin/open /Applications/Rhino 8.app --args -nosplash
 ```
 
-macOS allows one worker. If Rhino is already open without its script server, BarkCode stops after a bounded wait and explains how to run `_StartScriptServer`. It does not keep waiting forever.
+macOS allows one worker. Rhino exposes its scripting endpoint after launch, so BarkCode only needs to open the application and wait for it to become ready. The wait has a fixed deadline.
 
 On Windows, BarkCode starts each worker with:
 
@@ -260,7 +260,7 @@ Windows-only benchmark tool for testing spawn performance with different instanc
 - Rhino is launched on demand with `/usr/bin/open`
 - Worker requests above one are clamped to one with a warning
 - BarkCode checks Rhino's bundled `rhinocode` when PATH lookup fails
-- Startup polling has a fixed deadline. An already-open Rhino without a script server gets a specific diagnostic
+- Startup polling has a fixed deadline
 
 ### Windows
 

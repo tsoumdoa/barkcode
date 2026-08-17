@@ -160,11 +160,8 @@ export class RhinoSession {
 			}
 		}
 
-		const existingMacHint = this.config.platform === "darwin" && preLaunchRhinoPids && preLaunchRhinoPids.size > 0
-			? " Rhino may already be open without its script server. Run _StartScriptServer once or add it to Rhino's startup commands."
-			: "";
 		throw new Error(
-			`Rhino did not expose ${effectiveCount} ready instance(s) within ${this.dependencies.maxWaitMs}ms.${existingMacHint}`,
+			`Rhino did not expose ${effectiveCount} ready instance(s) within ${this.dependencies.maxWaitMs}ms.`,
 			{ cause: lastDiscoveryError },
 		);
 	}

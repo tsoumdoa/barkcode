@@ -151,7 +151,7 @@ describe("RhinoSession", () => {
 		expect(launchCount).toBe(1);
 	});
 
-	it("bounds the macOS wait and explains the already-open case", async () => {
+	it("bounds the macOS readiness wait", async () => {
 		const client = clientWithLists([[]]);
 		const session = new RhinoSession(getRhinoPlatformConfig("darwin"), client, dependencies({
 			listRhinoProcessIds: async () => new Set([42]),
@@ -159,7 +159,7 @@ describe("RhinoSession", () => {
 		}));
 
 		await expect(session.ensureInstances({ requestedCount: 1 })).rejects.toThrow(
-			"Rhino may already be open without its script server",
+			"Rhino did not expose 1 ready instance(s) within 20ms.",
 		);
 	});
 
