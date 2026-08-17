@@ -48,8 +48,8 @@ export async function showCommandMenu(
     return { type: "exit" };
   } catch (e) {
     if (e instanceof ExitPromptError || (e as Error).name === "ExitPromptError") {
-      displayInfo("\nExiting Barkcode. Rhino will remain open.");
-      process.exit(0);
+      displayInfo("\nExiting Barkcode.");
+      return { type: "exit" };
     }
     throw e;
   }

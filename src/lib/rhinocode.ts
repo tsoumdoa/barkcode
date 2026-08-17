@@ -1,11 +1,74 @@
-import chalk from "chalk";
-import { spawn } from "child_process";
 import { existsSync } from "fs";
 import { resolve } from "path";
-import type { RhinoInstance, CommandResult, BarkCommand } from "../types";
+import type { BarkCommand, CommandResult } from "../types";
 import { DEFAULT_TIMEOUT } from "../constants";
-import { displayInfo, displayDebug } from "./logger";
-import { listRhinoInstancesJson } from "./rhinocode-schemas";
+import { displayDebug } from "./logger";
+import {
+	discoverRhinoInstances,
+	type DiscoveryResult,
+	type RhinocodeProcessResult,
+	type RhinocodeRun,
+} from "./rhinocode-schemas";
+
+export async function runRhinocodeProcess(
+	executable: string,
+	args: string[],
+): Promise<RhinocodeProcessResult> {
+	const proc = Bun.spawn([executable, ...args], {
+		stdout: "pipe",
+		stderr: "pipe",
+		stdin: "ignore",
+	});
+	const stdoutPromise = new Response(proc.stdout).text();
+	const stderrPromise = new Response(proc.stderr).text();
+	const [exitCode, stdout, stderr] = await Promise.all([
+		proc.exited,
+		stdoutPromise,
+		stderrPromise,
+	]);
+	return { exitCode, stdout, stderr };
+}
+
+export class RhinocodeClient {
+	readonly run: RhinocodeRun;
+
+	constructor(
+		public readonly executable: string,
+		run?: RhinocodeRun,
+	) {
+		this.run = run ?? ((args) => runRhinocodeProcess(executable, args));
+	}
+
+	list(): Promise<DiscoveryResult> {
+		return discoverRhinoInstances(this.run);
+	}
+
+	async checkAvailable(): Promise<void> {
+		let result: RhinocodeProcessResult;
+		try {
+			result = await this.run(["--version"]);
+		} catch (cause) {
+			throw new Error(`Failed to start rhinocode at ${this.executable}.`, { cause });
+		}
+		if (result.exitCode !== 0) {
+			throw new Error(`rhinocode --version exited with code ${result.exitCode}.`);
+		}
+	}
+
+	async command(pipeId: string, command: string): Promise<number> {
+		const result = await this.run(["--rhino", pipeId, "command", command]);
+		return result.exitCode;
+	}
+
+	async open(pipeId: string, inputFile: string): Promise<number> {
+		const result = await this.run(["--rhino", pipeId, "command", "-_open", `"${inputFile}"`]);
+		return result.exitCode;
+	}
+
+	async quit(pipeId: string): Promise<number> {
+		return this.command(pipeId, "_-Quit");
+	}
+}
 
 export function buildOutputPath(
 	outputFolder: string,
@@ -26,40 +89,23 @@ export async function pollForFile(
 ): Promise<boolean> {
 	const startTime = Date.now();
 	displayDebug("pollForFile", `starting poll for: ${filePath}`);
-	displayDebug("pollForFile", `timeout: ${timeoutMs}ms, interval: ${intervalMs}ms`);
 
 	while (Date.now() - startTime < timeoutMs) {
-		const elapsed = Date.now() - startTime;
-		if (existsSync(filePath)) {
-			displayDebug("pollForFile", `file found after ${elapsed}ms: ${filePath}`);
-			return true;
-		}
-		if (elapsed % 2000 < intervalMs * 2) {
-			displayDebug("pollForFile", `still polling... ${elapsed}ms elapsed`);
-		}
-		await new Promise((resolve) => setTimeout(resolve, intervalMs));
+		if (existsSync(filePath)) return true;
+		await new Promise((done) => setTimeout(done, intervalMs));
 	}
 
-	displayDebug("pollForFile", `TIMEOUT after ${timeoutMs}ms: ${filePath} not found`);
+	displayDebug("pollForFile", `timeout after ${timeoutMs}ms: ${filePath} not found`);
 	return false;
 }
 
-export async function connect(): Promise<RhinoInstance> {
-	const instances = await listRhinoInstancesJson();
-	if (instances.length === 0) {
-		throw new Error("No Rhino instance found. Start Rhino first with 'bark run'");
-	}
-
-	const lastInstance = instances[instances.length - 1]!;
-	return { id: lastInstance.pipeId, connected: true };
-}
-
 export async function execute(
+	client: RhinocodeClient,
 	inputFile: string,
 	fileName: string,
 	command: BarkCommand,
 	projectRoot: string,
-	instanceId?: string,
+	instanceId: string,
 ): Promise<CommandResult> {
 	const timeout = DEFAULT_TIMEOUT * 1000;
 	const pollInterval = command.pollIntervalMs ?? 500;
@@ -76,81 +122,26 @@ export async function execute(
 		fileName,
 		projectRoot,
 	);
-
-	let replacedCommand = command.rhCommand
+	const replacedCommand = command.rhCommand
 		.replace(/{{path}}/g, `"${outputPath}"`)
 		.replace(/{{fileName}}/g, `"${fileName}"`);
 
-	const rhinoArg = instanceId ? ["--rhino", instanceId] : [];
-	const openArgs = [...rhinoArg, "command", '-_open', `"${inputFile}"`];
-	displayDebug("rhinocode", `spawn: rhinocode ${openArgs.join(" ")}`);
-
-	return new Promise((resolve) => {
-		const openProc = spawn("rhinocode", openArgs, {
-			stdio: "pipe",
-		});
-
-		openProc.on("close", (openCode) => {
-			displayDebug("rhinocode", `file opened with code: ${openCode}`);
-			displayDebug("rhinocode", `command string: "${replacedCommand}"`);
-			const cmdArgs = [...rhinoArg, "command", replacedCommand];
-			const cmdProc = spawn("rhinocode", cmdArgs, {
-				stdio: "pipe",
-			});
-
-			cmdProc.on("close", (cmdCode) => {
-				displayDebug("rhinocode", `command executed with code: ${cmdCode}`);
-				displayDebug("rhinocode", `polling for export: ${outputPath}`);
-
-				(async () => {
-					const found = await pollForFile(outputPath, timeout, pollInterval);
-					displayDebug("rhinocode", `export file found: ${found}`);
-					resolve({
-						success: found,
-						output: `Export completed: ${found}`,
-						durationMs: Date.now() - startTime,
-					});
-				})();
-			});
-		});
-
-		let stdout = "";
-		openProc.stdout?.on("data", (chunk) => {
-			stdout += chunk.toString();
-		});
-	});
-}
-
-
-export async function disconnect(instanceId: string): Promise<void> {
-	displayInfo(`  Disconnected from Rhino ${instanceId}`);
-}
-
-export async function isRhinocodeAvailable(): Promise<boolean> {
-	try {
-		const proc = spawn("rhinocode", ["--version"], {
-			stdio: "pipe",
-			shell: true,
-		});
-
-		const code = await new Promise<number>((resolve) => {
-			proc.on("close", (c) => resolve(c ?? -1));
-		});
-
-		return code === 0;
-	} catch {
-		return false;
+	displayDebug("rhinocode", `${client.executable} --rhino ${instanceId} command -_open`);
+	const openCode = await client.open(instanceId, inputFile);
+	if (openCode !== 0) {
+		return { success: false, error: `Rhino open command exited with code ${openCode}.`, durationMs: Date.now() - startTime };
 	}
-}
 
-export async function listRhinoInstances(): Promise<string[]> {
-	const instances = await listRhinoInstancesJson();
-	return instances.map((i) => i.pipeId);
-}
+	const commandCode = await client.command(instanceId, replacedCommand);
+	if (commandCode !== 0) {
+		return { success: false, error: `Rhino command exited with code ${commandCode}.`, durationMs: Date.now() - startTime };
+	}
 
-export function closeAll() {
-	displayDebug("rhinocode", "running _-Quit on all instances");
-	spawn("rhinocode", ["command", "_-Quit"], {
-		stdio: "pipe",
-	});
+	const found = await pollForFile(outputPath, timeout, pollInterval);
+	return {
+		success: found,
+		output: `Export completed: ${found}`,
+		error: found ? undefined : `Timed out waiting for ${outputPath}.`,
+		durationMs: Date.now() - startTime,
+	};
 }

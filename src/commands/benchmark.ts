@@ -1,12 +1,10 @@
 import { platform } from "os";
 import chalk from "chalk";
-import { displayWarning } from "../lib/logger";
 import { Bench, type Task } from "tinybench";
-import { RHINO_PATH } from "../constants";
-import { createRhinoRunner } from "../lib/rhino";
+import { createRhinoSession } from "../lib/rhino";
+import { getRhinoPlatformConfig, resolveRhinocodeExecutable } from "../lib/rhino-platform";
+import { RhinocodeClient } from "../lib/rhinocode";
 import { killRhinoInstances } from "../lib/kill-rhino";
-import { listRhinoInstancesJson } from "../lib/rhinocode-schemas";
-import { POLL_INTERVAL_MS, MAX_WAIT_MS, MAX_RETRIES } from "../lib/spawn-constants";
 
 export type BenchmarkResult = {
 	instances: number;
@@ -14,61 +12,6 @@ export type BenchmarkResult = {
 	spawnElapsedMs: number;
 	timestamp: string;
 };
-
-async function spawnWithTiming(count: number, delayMs: number): Promise<{ pipeIds: string[]; spawnElapsedMs: number } | null> {
-	const startTime = Date.now();
-	const initialInstances = await listRhinoInstancesJson();
-	const initialCount = initialInstances.length;
-
-	const spawn = async (needed: number): Promise<void> => {
-		for (let i = 0; i < needed; i++) {
-			Bun.spawn(
-				[RHINO_PATH, "/nosplash", '/runscript="_StartScriptServer"'],
-				{
-					stdout: "ignore",
-					stderr: "ignore",
-					stdin: "ignore",
-					windowsVerbatimArguments: true,
-				},
-			);
-			if (needed > 1) {
-				await new Promise((r) => setTimeout(r, delayMs));
-			}
-		}
-	};
-
-	const getSpawnedCount = async (): Promise<number> => {
-		const currentInstances = await listRhinoInstancesJson();
-		return currentInstances.length - initialCount;
-	};
-
-	await spawn(count);
-	const spawnEndTime = Date.now();
-	const spawnElapsed = spawnEndTime - startTime;
-
-	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-		for (let elapsed = POLL_INTERVAL_MS; elapsed <= MAX_WAIT_MS; elapsed += POLL_INTERVAL_MS) {
-			await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-			const spawned = await getSpawnedCount();
-			if (spawned >= count) {
-				const currentInstances = await listRhinoInstancesJson();
-				return { pipeIds: currentInstances.map((i) => i.pipeId), spawnElapsedMs: spawnElapsed };
-			}
-		}
-
-		const spawned = await getSpawnedCount();
-		const missing = count - spawned;
-		if (missing > 0) {
-			await spawn(missing);
-		}
-	}
-
-	const finalCount = await getSpawnedCount();
-	if (finalCount === 0) return null;
-
-	const currentInstances = await listRhinoInstancesJson();
-	return { pipeIds: currentInstances.map((i) => i.pipeId), spawnElapsedMs: spawnElapsed };
-}
 
 const COL_WIDTHS = { name: 24, ops: 14, avg: 14, min: 14, max: 14 };
 
@@ -142,9 +85,9 @@ export async function benchmark(options: {
 		? options.delay.split(",").map(Number)
 		: [10, 30, 50, 150].reverse();
 
-	const rhinoRunner = createRhinoRunner(RHINO_PATH);
-	await rhinoRunner.checkRhinoOrExit();
-	await rhinoRunner.checkRhinocodeOrExit();
+	const config = getRhinoPlatformConfig("win32");
+	const client = new RhinocodeClient(resolveRhinocodeExecutable(config));
+	await client.checkAvailable();
 
 	const ITERATIONS = 1;
 
@@ -159,14 +102,15 @@ export async function benchmark(options: {
 		for (const delayMs of delayValues) {
 			const taskName = `spawn-${count}@${delayMs}ms`;
 			bench.add(taskName, async () => {
-				const result = await spawnWithTiming(count, delayMs);
-				if (!result) return { overriddenDuration: 0 };
+				const session = createRhinoSession({ config, client });
+				const result = await session.ensureInstances({ requestedCount: count, spawnDelayMs: delayMs });
 				return { overriddenDuration: result.spawnElapsedMs };
 			}, {
 				beforeEach: async function(this: Task) {
 					process.stdout.write(`\r\x1b[2K  ${this.name}  ${this.runs + 1}/${ITERATIONS}...`);
-					const instances = await listRhinoInstancesJson();
-					await killRhinoInstances(instances);
+					const discovery = await client.list();
+					if (discovery.kind === "error") throw discovery.error;
+					await killRhinoInstances(client, discovery.instances);
 				},
 			});
 		}

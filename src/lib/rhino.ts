@@ -1,134 +1,297 @@
 import chalk from "chalk";
-import { platform } from "os";
-import { RHINO_PATH } from "../constants";
-import { isRhinocodeAvailable } from "./rhinocode";
-import { listRhinoInstancesJson } from "./rhinocode-schemas";
-import { displayError, displayInfo, displayWarning, displaySuccess } from "./logger";
-import { POLL_INTERVAL_MS, MAX_WAIT_MS, MAX_RETRIES, DEFAULT_SPAWN_DELAY_MS } from "./spawn-constants";
+import { existsSync } from "fs";
+import type { RhinoInstanceJson } from "../types";
+import { displayDebug } from "./logger";
+import {
+	assertRhinoInstalled,
+	getRhinoPlatformConfig,
+	resolveRhinocodeExecutable,
+	type RhinoPlatformConfig,
+} from "./rhino-platform";
+import { RhinocodeClient } from "./rhinocode";
+import { type RhinoDiscoveryError } from "./rhinocode-schemas";
+import { DEFAULT_SPAWN_DELAY_MS, MAX_WAIT_MS, POLL_INTERVAL_MS } from "./spawn-constants";
 
-export function delay(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
+export type EnsureRhinoResult = {
+	effectiveCount: number;
+	pipeIds: string[];
+	launchedPipeIds: string[];
+	reusedPipeIds: string[];
+	spawnElapsedMs: number;
+};
 
-export async function isRhinoRunning(): Promise<{ running: boolean; output: string }> {
-	try {
-		const instances = await listRhinoInstancesJson();
-		return { running: instances.length > 0, output: JSON.stringify(instances) };
-	} catch {
-		return { running: false, output: "" };
+export type RhinoSessionState = {
+	activePipeIds: Set<string>;
+	ownedPipeIds: Set<string>;
+	cleanedPipeIds: Set<string>;
+};
+
+export class RhinoLaunchError extends Error {
+	constructor(message: string, options: { cause?: unknown } = {}) {
+		super(message, options);
+		this.name = "RhinoLaunchError";
 	}
 }
 
-export function createRhinoRunner(rhinoPath: string) {
-	return {
-		async checkRhinoOrExit() {
-			displayInfo("Checking for Rhino 8...");
-			if (platform() === "darwin") return;
-			const file = Bun.file(rhinoPath);
-			const exists = await file.exists();
-			if (!exists) {
-				displayError("Rhino not found!");
-				displayInfo("  Expected at: " + rhinoPath);
-				console.log();
-				displayWarning("Please check your Rhino 8 installation.");
-				process.exit(1);
-			}
-			displaySuccess("Rhino 8 found.\n");
-		},
-		async spawnRhino(count: number, delayMs?: number): Promise<{ pipeIds: string[]; spawnElapsedMs: number }> {
-			const startTime = Date.now();
-			const initialInstances = await listRhinoInstancesJson();
-			const initialCount = initialInstances.length;
+export class RhinoReadinessError extends Error {
+	constructor(message: string, options: { cause?: unknown } = {}) {
+		super(message, options);
+		this.name = "RhinoReadinessError";
+	}
+}
 
-			const spawn = async (needed: number): Promise<void> => {
-				for (let i = 0; i < needed; i++) {
-					console.log(chalk.gray(`  Spawning ${i + 1}/${needed} instance(s)...`));
-					Bun.spawn(
-						[RHINO_PATH, "/nosplash", '/runscript="_StartScriptServer"'],
-						{
-							stdout: "ignore",
-							stderr: "ignore",
-							stdin: "ignore",
-							windowsVerbatimArguments: true,
-						},
-					);
-					if (needed > 1) {
-						console.log(chalk.gray(`  Waiting ${delayMs ?? DEFAULT_SPAWN_DELAY_MS}ms before next spawn...`));
-						await delay(delayMs ?? DEFAULT_SPAWN_DELAY_MS);
-					}
-				}
-			};
+type LaunchProcess = (
+	command: string,
+	args: string[],
+	config: RhinoPlatformConfig,
+) => Promise<{ pid?: number }>;
 
-			const getSpawnedCount = async (): Promise<number> => {
-				const currentInstances = await listRhinoInstancesJson();
-				return currentInstances.length - initialCount;
-			};
+export type RhinoSessionDependencies = {
+	now: () => number;
+	sleep: (ms: number) => Promise<void>;
+	exists: (path: string) => boolean;
+	launch: LaunchProcess;
+	listRhinoProcessIds: (config: RhinoPlatformConfig) => Promise<Set<number>>;
+	pollIntervalMs: number;
+	maxWaitMs: number;
+};
 
-			await spawn(count);
-			const spawnEndTime = Date.now();
-			const spawnElapsed = spawnEndTime - startTime;
+const defaultDependencies: RhinoSessionDependencies = {
+	now: Date.now,
+	sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
+	exists: existsSync,
+	launch: async (command, args, config) => {
+		try {
+			const proc = Bun.spawn([command, ...args], {
+				stdout: "ignore",
+				stderr: "ignore",
+				stdin: "ignore",
+				windowsVerbatimArguments: config.platform === "win32",
+			});
+			return { pid: proc.pid };
+		} catch (cause) {
+			throw new RhinoLaunchError(`Failed to launch Rhino with ${command}.`, { cause });
+		}
+	},
+	listRhinoProcessIds: async (config) => {
+		if (config.platform !== "darwin") return new Set<number>();
+		try {
+			const proc = Bun.spawn(["/usr/bin/pgrep", "-x", config.processName], {
+				stdout: "pipe",
+				stderr: "ignore",
+			});
+			const output = await new Response(proc.stdout).text();
+			await proc.exited;
+			return new Set(
+				output
+					.split(/\s+/)
+					.filter(Boolean)
+					.map(Number)
+					.filter(Number.isInteger),
+			);
+		} catch {
+			return new Set<number>();
+		}
+	},
+	pollIntervalMs: POLL_INTERVAL_MS,
+	maxWaitMs: MAX_WAIT_MS,
+};
 
-			for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-				for (let elapsed = POLL_INTERVAL_MS; elapsed <= MAX_WAIT_MS; elapsed += POLL_INTERVAL_MS) {
-					await delay(POLL_INTERVAL_MS);
-					const spawned = await getSpawnedCount();
-					if (spawned >= count) {
-						const currentInstances = await listRhinoInstancesJson();
-						return { pipeIds: currentInstances.map((i) => i.pipeId), spawnElapsedMs: spawnElapsed };
-					}
-					console.log(chalk.gray(`  [${elapsed / 1000}s] ${spawned}/${count} instances running...`));
-				}
-
-				const spawned = await getSpawnedCount();
-				const missing = count - spawned;
-				if (missing > 0) {
-					console.log(chalk.gray(`  Attempt ${attempt + 1}/${MAX_RETRIES}: ${spawned}/${count} running. Retrying ${missing}...`));
-					await spawn(missing);
-				}
-			}
-
-			const finalCount = await getSpawnedCount();
-			throw new Error(`Failed to spawn ${count} Rhino instances after ${MAX_RETRIES + 1} attempts (${finalCount}/${count})`);
-		},
-		async checkRhinocodeOrExit(): Promise<void> {
-			displayInfo("Checking for rhinocode...");
-			const hasRhinocode = await isRhinocodeAvailable();
-			if (!hasRhinocode) {
-				displayError("rhinocode not recognized!");
-				displayInfo("  Ensure rhinocode is in your system PATH.");
-				process.exit(1);
-			}
-			displaySuccess("rhinocode found.");
-		},
-		getRunningProcesses: async () => {
-			const instances = await listRhinoInstancesJson();
-			if (instances.length === 0) return [];
-			return instances.map((i) => i.pipeId);
-		},
-		waitForRhinoInstances,
+export class RhinoSession {
+	readonly state: RhinoSessionState = {
+		activePipeIds: new Set(),
+		ownedPipeIds: new Set(),
+		cleanedPipeIds: new Set(),
 	};
-}
 
-async function getRunningProcessesReal(): Promise<string[]> {
-	const instances = await listRhinoInstancesJson();
-	if (instances.length === 0) return [];
-	return instances.map((i) => i.pipeId);
-}
+	private readonly dependencies: RhinoSessionDependencies;
+	private cleanupPromise?: Promise<void>;
 
-export async function waitForRhinoInstances(expectedCount: number): Promise<string[]> {
-	while (true) {
-		const processes = await getRunningProcessesReal();
-		const currentCount = processes.length;
-		console.log(
-			chalk.gray(
-				`  Current state: ${currentCount}/${expectedCount} Rhino processes running`,
-			),
-		);
+	constructor(
+		public readonly config: RhinoPlatformConfig,
+		public readonly client: RhinocodeClient,
+		dependencies: Partial<RhinoSessionDependencies> = {},
+	) {
+		this.dependencies = { ...defaultDependencies, ...dependencies };
+	}
 
-		if (currentCount >= expectedCount) {
-			return processes;
+	async ensureInstances(options: {
+		requestedCount: number;
+		spawnDelayMs?: number;
+	}): Promise<EnsureRhinoResult> {
+		const requestedCount = options.requestedCount;
+		if (!Number.isInteger(requestedCount) || requestedCount < 1) {
+			throw new RangeError("The Rhino instance count must be a positive integer.");
 		}
 
-		await delay(1000);
+		assertRhinoInstalled(this.config, this.dependencies.exists);
+		const effectiveCount = Math.min(requestedCount, this.config.maxInstances);
+		const initial = await this.client.list();
+		if (initial.kind === "error") throw initial.error;
+
+		let selected = this.selectInstances(initial.instances, effectiveCount);
+		if (selected.length === effectiveCount) {
+			return this.recordSelection(selected, effectiveCount, 0);
+		}
+
+		const missingCount = effectiveCount - selected.length;
+		const launchStartedAt = this.dependencies.now();
+		const preLaunchRhinoPids = this.config.platform === "darwin"
+			? await this.dependencies.listRhinoProcessIds(this.config)
+			: new Set<number>();
+		const directChildPids = new Set<number>();
+		const spawnDelayMs = options.spawnDelayMs ?? DEFAULT_SPAWN_DELAY_MS;
+
+		for (let index = 0; index < missingCount; index++) {
+			console.log(chalk.gray(`  Starting Rhino ${index + 1}/${missingCount}...`));
+			let launched: { pid?: number };
+			try {
+				launched = await this.dependencies.launch(
+					this.config.launchCommand,
+					[...this.config.launchArgs],
+					this.config,
+				);
+			} catch (cause) {
+				if (cause instanceof RhinoLaunchError) throw cause;
+				throw new RhinoLaunchError(`Failed to launch Rhino with ${this.config.launchCommand}.`, { cause });
+			}
+			if (this.config.platform === "win32" && launched.pid !== undefined) {
+				directChildPids.add(launched.pid);
+			}
+			if (index < missingCount - 1) await this.dependencies.sleep(spawnDelayMs);
+		}
+
+		let lastDiscoveryError: RhinoDiscoveryError | undefined;
+		while (this.dependencies.now() - launchStartedAt < this.dependencies.maxWaitMs) {
+			await this.dependencies.sleep(this.dependencies.pollIntervalMs);
+			const discovery = await this.client.list();
+			if (discovery.kind === "error") {
+				lastDiscoveryError = discovery.error;
+				displayDebug("rhino", `readiness discovery failed: ${discovery.error.message}`);
+				continue;
+			}
+
+			this.recordProvenOwnership(discovery.instances, directChildPids, preLaunchRhinoPids);
+			selected = this.selectInstances(discovery.instances, effectiveCount);
+			if (selected.length === effectiveCount) {
+				return this.recordSelection(
+					selected,
+					effectiveCount,
+					this.dependencies.now() - launchStartedAt,
+				);
+			}
+		}
+
+		const existingMacHint = this.config.platform === "darwin" && preLaunchRhinoPids.size > 0
+			? " Rhino may already be open without its script server. Run _StartScriptServer once or add it to Rhino's startup commands."
+			: "";
+		throw new RhinoReadinessError(
+			`Rhino did not expose ${effectiveCount} ready instance(s) within ${this.dependencies.maxWaitMs}ms.${existingMacHint}`,
+			{ cause: lastDiscoveryError },
+		);
 	}
+
+	async quitInstance(pipeId: string): Promise<void> {
+		if (this.state.cleanedPipeIds.has(pipeId)) return;
+		this.state.cleanedPipeIds.add(pipeId);
+		const exitCode = await this.client.quit(pipeId);
+		if (exitCode !== 0) throw new Error(`Failed to quit Rhino ${pipeId}. rhinocode exited with code ${exitCode}.`);
+	}
+
+	cleanupOwned(): Promise<void> {
+		if (this.cleanupPromise) return this.cleanupPromise;
+		this.cleanupPromise = (async () => {
+			for (const pipeId of this.state.ownedPipeIds) {
+				if (this.state.cleanedPipeIds.has(pipeId)) continue;
+				this.state.cleanedPipeIds.add(pipeId);
+				try {
+					await this.client.quit(pipeId);
+				} catch (error) {
+					displayDebug("rhino", `cleanup failed for ${pipeId}: ${(error as Error).message}`);
+				}
+			}
+		})();
+		return this.cleanupPromise;
+	}
+
+	private selectInstances(instances: RhinoInstanceJson[], count: number): RhinoInstanceJson[] {
+		const byPipeId = new Map(instances.map((instance) => [instance.pipeId, instance]));
+		const selected: RhinoInstanceJson[] = [];
+
+		for (const pipeId of this.state.activePipeIds) {
+			const active = byPipeId.get(pipeId);
+			if (active) {
+				selected.push(active);
+				byPipeId.delete(pipeId);
+			}
+			if (selected.length === count) return selected;
+		}
+
+		const reusable = [...byPipeId.values()].sort(
+			(a, b) => a.processId - b.processId || a.pipeId.localeCompare(b.pipeId),
+		);
+		return [...selected, ...reusable].slice(0, count);
+	}
+
+	private recordProvenOwnership(
+		instances: RhinoInstanceJson[],
+		directChildPids: Set<number>,
+		preLaunchRhinoPids: Set<number>,
+	): void {
+		for (const instance of instances) {
+			const owned = this.config.platform === "win32"
+				? directChildPids.has(instance.processId)
+				: !preLaunchRhinoPids.has(instance.processId);
+			if (owned) this.state.ownedPipeIds.add(instance.pipeId);
+		}
+	}
+
+	private recordSelection(
+		selected: RhinoInstanceJson[],
+		effectiveCount: number,
+		spawnElapsedMs: number,
+	): EnsureRhinoResult {
+		const pipeIds = selected.map((instance) => instance.pipeId);
+		this.state.activePipeIds = new Set(pipeIds);
+		return {
+			effectiveCount,
+			pipeIds,
+			launchedPipeIds: pipeIds.filter((pipeId) => this.state.ownedPipeIds.has(pipeId)),
+			reusedPipeIds: pipeIds.filter((pipeId) => !this.state.ownedPipeIds.has(pipeId)),
+			spawnElapsedMs,
+		};
+	}
+}
+
+export function createRhinoSession(options: {
+	platform?: NodeJS.Platform;
+	config?: RhinoPlatformConfig;
+	rhinocodeExecutable?: string;
+	client?: RhinocodeClient;
+	dependencies?: Partial<RhinoSessionDependencies>;
+} = {}): RhinoSession {
+	const config = options.config ?? getRhinoPlatformConfig(options.platform);
+	assertRhinoInstalled(config, options.dependencies?.exists ?? existsSync);
+	const executable = options.rhinocodeExecutable ?? options.client?.executable ?? resolveRhinocodeExecutable(config);
+	const client = options.client ?? new RhinocodeClient(executable);
+	return new RhinoSession(config, client, options.dependencies);
+}
+
+export function delay(ms: number): Promise<void> {
+	return defaultDependencies.sleep(ms);
+}
+
+export function installSessionSignalCleanup(session: RhinoSession): () => void {
+	const onSigint = () => {
+		void session.cleanupOwned().finally(() => process.exit(130));
+	};
+	const onSigterm = () => {
+		void session.cleanupOwned().finally(() => process.exit(143));
+	};
+	process.once("SIGINT", onSigint);
+	process.once("SIGTERM", onSigterm);
+	return () => {
+		process.off("SIGINT", onSigint);
+		process.off("SIGTERM", onSigterm);
+	};
 }
