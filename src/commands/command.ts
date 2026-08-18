@@ -39,8 +39,14 @@ export async function runCommand(options: {
 				process.exitCode = 1;
 			}
 
-			if (!result.launchedPipeIds.includes(pipeId)) {
-				const shouldQuit = await confirm({ message: "Quit the existing Rhino instance?", default: false });
+			const launched = result.launchedPipeIds.includes(pipeId);
+			if (session.config.platform === "darwin" || !launched) {
+				const shouldQuit = await confirm({
+					message: launched
+						? "Quit the Rhino instance started by Barkcode?"
+						: "Quit the existing Rhino instance?",
+					default: false,
+				});
 				if (shouldQuit) {
 					displayInfo("Quitting Rhino...");
 					await session.quitInstance(pipeId);

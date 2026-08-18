@@ -65,7 +65,8 @@ describe("RhinoSession", () => {
 
 	it("clamps macOS to one and uses the macOS launch spec", async () => {
 		const launches: Array<[string, string[]]> = [];
-		const client = clientWithLists([[], [status("mac", 55)]]);
+		const commands: string[][] = [];
+		const client = clientWithLists([[], [status("mac", 55)]], commands);
 		const config = getRhinoPlatformConfig("darwin");
 		const session = new RhinoSession(config, client, dependencies({
 			launch: async (command: string, args: string[]) => {
@@ -80,6 +81,9 @@ describe("RhinoSession", () => {
 		expect(result.pipeIds).toEqual(["mac"]);
 		expect(result.launchedPipeIds).toEqual(["mac"]);
 		expect(launches).toEqual([[config.launchCommand, config.launchArgs]]);
+
+		await session.cleanupOwned();
+		expect(commands).toEqual([]);
 	});
 
 	it("launches missing Windows capacity once and never owns an unrelated process", async () => {
@@ -163,9 +167,10 @@ describe("RhinoSession", () => {
 		);
 	});
 
-	it("retries a macOS quit after a non-zero exit", async () => {
+	it("force terminates a Windows child after a non-zero quit exit", async () => {
 		let listCount = 0;
 		let quitCount = 0;
+		const terminated: number[] = [];
 		const client = new RhinocodeClient("mock-rhinocode", async (args) => {
 			if (args[0] === "list") {
 				const instances = listCount++ === 0 ? [] : [status("owned", 55)];
@@ -174,16 +179,16 @@ describe("RhinoSession", () => {
 			quitCount++;
 			return { exitCode: quitCount === 1 ? 7 : 0, stdout: "", stderr: "" };
 		});
-		const session = new RhinoSession(getRhinoPlatformConfig("darwin"), client, dependencies({
-			launch: async () => ({}),
-			listRhinoProcessIds: async () => new Set<number>(),
+		const session = new RhinoSession(getRhinoPlatformConfig("win32"), client, dependencies({
+			launch: async () => ({ pid: 55 }),
+			terminateProcess: async (pid: number) => { terminated.push(pid); },
 		}));
 
 		await session.ensureInstances({ requestedCount: 1 });
 		await session.cleanupOwned();
-		await session.cleanupOwned();
 
-		expect(quitCount).toBe(2);
+		expect(quitCount).toBe(1);
+		expect(terminated).toEqual([55]);
 	});
 
 	it("terminates an earlier Windows child when a later launch fails", async () => {

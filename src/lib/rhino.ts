@@ -86,6 +86,7 @@ const defaultDependencies: RhinoSessionDependencies = {
 export class RhinoSession {
 	private readonly dependencies: RhinoSessionDependencies;
 	private activePipeIds = new Set<string>();
+	private readonly launchedPipes = new Set<string>();
 	private readonly ownedPipes = new Map<string, number>();
 	private readonly ownedProcessIds = new Set<number>();
 	private cleanupPromise?: Promise<void>;
@@ -153,7 +154,7 @@ export class RhinoSession {
 				continue;
 			}
 
-			this.recordOwnedInstances(instances, this.ownedProcessIds, preLaunchRhinoPids);
+			this.recordLaunchedInstances(instances, this.ownedProcessIds, preLaunchRhinoPids);
 			selected = this.selectInstances(instances, effectiveCount);
 			if (selected.length === effectiveCount) {
 				return this.recordSelection(selected, this.dependencies.now() - launchStartedAt);
@@ -216,17 +217,24 @@ export class RhinoSession {
 		return [...selected, ...reusable].slice(0, count);
 	}
 
-	private recordOwnedInstances(
+	private recordLaunchedInstances(
 		instances: RhinoInstanceJson[],
 		directChildPids: Set<number>,
 		preLaunchRhinoPids: Set<number> | undefined,
 	): void {
 		for (const instance of instances) {
-			const owned = this.config.platform === "win32"
+			const launched = this.config.platform === "win32"
 				? directChildPids.has(instance.processId)
 				: preLaunchRhinoPids !== undefined && !preLaunchRhinoPids.has(instance.processId);
-			if (!owned) continue;
-			this.ownedPipes.set(instance.pipeId, instance.processId);
+			if (!launched) continue;
+			this.launchedPipes.add(instance.pipeId);
+
+			// /usr/bin/open does not expose the Rhino application PID, so a macOS
+			// PID snapshot cannot prove ownership. Only direct Windows children are
+			// safe to close automatically.
+			if (this.config.platform === "win32") {
+				this.ownedPipes.set(instance.pipeId, instance.processId);
+			}
 		}
 	}
 
@@ -238,7 +246,7 @@ export class RhinoSession {
 		this.activePipeIds = new Set(pipeIds);
 		return {
 			pipeIds,
-			launchedPipeIds: pipeIds.filter((pipeId) => this.ownedPipes.has(pipeId)),
+			launchedPipeIds: pipeIds.filter((pipeId) => this.launchedPipes.has(pipeId)),
 			spawnElapsedMs,
 		};
 	}
@@ -247,7 +255,7 @@ export class RhinoSession {
 		if (this.ownedProcessIds.size === 0) return;
 		try {
 			const instances = await this.client.list();
-			this.recordOwnedInstances(instances, this.ownedProcessIds, undefined);
+			this.recordLaunchedInstances(instances, this.ownedProcessIds, undefined);
 		} catch (error) {
 			displayDebug("rhino", `cleanup discovery failed: ${(error as Error).message}`);
 		}
@@ -255,6 +263,7 @@ export class RhinoSession {
 
 	private forgetOwnedPipe(pipeId: string): void {
 		const processId = this.ownedPipes.get(pipeId);
+		this.launchedPipes.delete(pipeId);
 		this.ownedPipes.delete(pipeId);
 		if (processId !== undefined) this.ownedProcessIds.delete(processId);
 	}
@@ -263,6 +272,7 @@ export class RhinoSession {
 		this.ownedProcessIds.delete(processId);
 		for (const [pipeId, mappedProcessId] of this.ownedPipes) {
 			if (mappedProcessId !== processId) continue;
+			this.launchedPipes.delete(pipeId);
 			this.ownedPipes.delete(pipeId);
 		}
 	}

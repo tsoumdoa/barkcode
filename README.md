@@ -94,7 +94,7 @@ On Windows, BarkCode starts each worker with:
 C:\Program Files\Rhino 8\System\Rhino.exe /nosplash /runscript="_StartScriptServer"
 ```
 
-One session tracks active workers and the instances BarkCode started. Recovery replaces dead worker IDs through that same session. Automatic cleanup leaves reused or ambiguous Rhino sessions open. If macOS process discovery fails before launch, BarkCode treats the resulting session as reused.
+One session tracks active workers and the instances BarkCode started. Recovery replaces dead worker IDs through that same session. On Windows, BarkCode automatically closes direct child processes that it can prove it owns. On macOS, `/usr/bin/open` cannot provide reliable ownership, so Rhino remains open unless the user explicitly chooses to quit it after a direct command.
 
 ### rhinocode CLI
 
@@ -114,7 +114,7 @@ BarkCode resolves `rhinocode` once for each session. It checks PATH first, then 
    - `rhinocode --rhino <id> -_open <file>` - Open the file
    - `rhinocode --rhino <id> command <rhCommand>` - Execute the command (e.g., `_SaveAs`)
    - `pollForFile()` - Wait for the output file to appear
-4. **Close**: After the command or menu exits, `_-Quit` is sent only to instances BarkCode identified as started by the current session
+4. **Close**: Windows instances started as direct children are closed automatically. macOS Rhino remains open unless the user explicitly chooses to quit it after a direct command.
 
 ## Project Structure
 
@@ -229,7 +229,7 @@ Launches the interactive menu:
 3. Reuses healthy workers and starts missing Rhino instances on macOS or Windows
 4. Shows a numbered menu of configured commands
 5. User selects a command → files are collected → batch processes
-6. Summary printed, then BarkCode closes only the Rhino instances it started
+6. Summary printed, then BarkCode closes owned Windows instances. Rhino remains open on macOS.
 
 **Options:**
 
@@ -261,6 +261,7 @@ Windows-only benchmark tool for testing spawn performance with different instanc
 - Worker requests above one are clamped to one with a warning
 - BarkCode checks Rhino's bundled `rhinocode` when PATH lookup fails
 - Startup polling has a fixed deadline
+- Rhino remains open after batch and interactive runs because `/usr/bin/open` does not expose reliable process ownership
 
 ### Windows
 

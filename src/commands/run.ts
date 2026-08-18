@@ -44,7 +44,11 @@ export async function run(
 
 			if (commandName) {
 				await executeCommandIfRequested(session.client, commandName, config, projectRoot, instances);
-				displayInfo("\nClosing Barkcode and Rhino instances started by Barkcode.");
+				displayInfo(
+					session.config.platform === "darwin"
+						? "\nClosing Barkcode. Rhino remains open on macOS."
+						: "\nClosing Barkcode and Rhino instances started by Barkcode.",
+				);
 				return;
 			}
 
