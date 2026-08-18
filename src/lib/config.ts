@@ -83,10 +83,6 @@ export async function loadConfig(options: ConfigLoadOptions = {}): Promise<Loade
   };
 }
 
-export function resolvePath(relativePath: string, projectRoot: string): string {
-  return resolve(projectRoot, relativePath);
-}
-
 export function getCommand(config: BarkcodeConfig, commandNameOrIndex: string | number) {
   if (typeof commandNameOrIndex === "number") {
     const cmd = config.commands[commandNameOrIndex - 1];

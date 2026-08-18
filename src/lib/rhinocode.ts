@@ -104,7 +104,6 @@ export async function execute(
 ): Promise<CommandResult> {
 	const timeout = DEFAULT_TIMEOUT * 1000;
 	const pollInterval = command.pollIntervalMs ?? 500;
-	const startTime = Date.now();
 
 	if (!command.rhCommand.includes("{{path}}")) {
 		throw new Error("rhCommand must contain {{path}} placeholder");
@@ -124,19 +123,17 @@ export async function execute(
 	displayDebug("rhinocode", `${client.executable} --rhino ${instanceId} command -_open`);
 	const openCode = await client.open(instanceId, inputFile);
 	if (openCode !== 0) {
-		return { success: false, error: `Rhino open command exited with code ${openCode}.`, durationMs: Date.now() - startTime };
+		return { success: false, error: `Rhino open command exited with code ${openCode}.` };
 	}
 
 	const commandCode = await client.command(instanceId, replacedCommand);
 	if (commandCode !== 0) {
-		return { success: false, error: `Rhino command exited with code ${commandCode}.`, durationMs: Date.now() - startTime };
+		return { success: false, error: `Rhino command exited with code ${commandCode}.` };
 	}
 
 	const found = await pollForFile(outputPath, timeout, pollInterval);
 	return {
 		success: found,
-		output: `Export completed: ${found}`,
 		error: found ? undefined : `Timed out waiting for ${outputPath}.`,
-		durationMs: Date.now() - startTime,
 	};
 }

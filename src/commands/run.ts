@@ -1,10 +1,9 @@
-import { basename, join } from "path";
 import { createRhinoSession, installSessionSignalCleanup } from "../lib/rhino";
 import { DEFAULT_SPAWN_COUNT, MAX_SPAWN_COUNT_WARNING } from "../constants";
 import { showCommandMenu } from "../lib/menu";
-import { processBatch, printBatchSummary } from "../lib/batch";
-import { displaySuccess, displayWarning, displayInfo, displayBold, displayError, setDebugMode } from "../lib/logger";
-import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested, ensureOutputFolder } from "./run-helpers";
+import { loadConfig } from "../lib/config";
+import { displaySuccess, displayWarning, displayInfo, displayError, setDebugMode } from "../lib/logger";
+import { ensureRhinoInstances, executeBatch, executeCommandIfRequested } from "./run-helpers";
 import type { RhinoSession, RunOptions, RunSessionOptions } from "../types";
 
 export async function run(options: RunOptions = {}) {
@@ -47,7 +46,7 @@ async function executeSession(
 	{ spawnCount, spawnDelay, configPath, commandName }: RunSessionOptions,
 ): Promise<void> {
 	await session.client.checkAvailable();
-	const loadedConfig = await loadConfigOrExit({ configPath });
+	const loadedConfig = await loadConfig({ configPath });
 	const { config, projectRoot } = loadedConfig;
 	displaySuccess(`Config loaded from ${loadedConfig.configPath}`);
 	displayInfo(`  Project root: ${projectRoot}\n`);
@@ -69,26 +68,18 @@ async function executeSession(
 		const action = await showCommandMenu(config, projectRoot);
 		if (action.type === "exit") break;
 
-		displayBold(`\nRunning: ${action.command.name}`);
-		displayInfo(`  Input: ${join(action.command.inputFolder || ".", action.command.inputPattern || "*.3dm")}`);
 		if (action.files.length === 0) {
-			displayWarning(`  No files found matching ${action.command.inputPattern || "*.3dm"}`);
+			displayWarning(`  No files found matching ${action.command.inputPattern}`);
 			continue;
 		}
 
 		({ pipeIds: instances } = await ensureRhinoInstances(session, spawnCount, spawnDelay));
-		displayInfo(`  Found ${action.files.length} file(s)`);
-		await ensureOutputFolder(action.command.outputFolder, projectRoot);
-
-		const fileNamesWithoutExt = action.files.map((file) => basename(file).replace(/\.[^/.]+$/, ""));
-		const { summary } = await processBatch(
+		await executeBatch(
 			session.client,
 			action.command,
 			action.files,
-			fileNamesWithoutExt,
 			instances,
 			projectRoot,
 		);
-		printBatchSummary(summary);
 	}
 }

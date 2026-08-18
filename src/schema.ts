@@ -1,6 +1,5 @@
 import * as v from "valibot";
 import { FileNameValidator, FolderPathValidator, RhinoCommandValidator } from "./lib/sanitize";
-import type { BarkcodeConfig, ConfigValidationResult } from "./types";
 
 export const BarkCommandSchema = v.object({
   id: v.string(),
@@ -30,11 +29,11 @@ const RhinoStatusSchema = v.object({
 
 export const RhinoInstanceListSchema = v.array(RhinoStatusSchema);
 
-export function validateConfig(data: unknown): ConfigValidationResult {
+export function validateConfig(data: unknown) {
   const result = v.safeParse(BarkcodeConfigSchema, data);
 
   if (result.success) {
-    return { success: true, data: result.output as BarkcodeConfig };
+    return { success: true as const, data: result.output };
   }
 
   const errors = result.issues.map((issue) => {
@@ -45,5 +44,5 @@ export function validateConfig(data: unknown): ConfigValidationResult {
     return `${path ? `${path}: ` : ""}${issue.message}`;
   });
 
-  return { success: false, error: errors.join("\n") };
+  return { success: false as const, error: errors.join("\n") };
 }

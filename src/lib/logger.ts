@@ -1,8 +1,9 @@
 import chalk from "chalk";
+import type { MessageFormatter, ProgressData, ProgressStatus } from "../types";
 
 let _debugMode = false;
 let _progressActive = false;
-let _progressData: { current: number; total: number; fileName: string; elapsedMs: number } | null = null;
+let _progressData: ProgressData | null = null;
 
 export function setDebugMode(enabled: boolean) {
 	_debugMode = enabled;
@@ -57,7 +58,7 @@ export function displayProgress(
 	current: number,
 	total: number,
 	fileName: string,
-	status: "processing" | "success" | "failed",
+	status: ProgressStatus,
 	elapsedMs: number,
 ) {
 	if (status === "processing") {
@@ -75,69 +76,49 @@ export function displayProgress(
 	}
 }
 
-export function displayMessage(message: string) {
+function printMessage(message: string, format: MessageFormatter): void {
 	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.green("✓ ") + chalk.white(message));
+	console.log(format(message));
 	if (_progressActive) _redrawProgress();
+}
+
+export function displayMessage(message: string) {
+	printMessage(message, (text) => chalk.green("✓ ") + chalk.white(text));
 }
 
 export function displaySuccess(message: string) {
-	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.green("✓ ") + chalk.gray(message));
-	if (_progressActive) _redrawProgress();
+	printMessage(message, (text) => chalk.green("✓ ") + chalk.gray(text));
 }
 
 export function displayError(message: string) {
-	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.red("✗ ") + chalk.white(message));
-	if (_progressActive) _redrawProgress();
+	printMessage(message, (text) => chalk.red("✗ ") + chalk.white(text));
 }
 
 export function displayWarning(message: string) {
-	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.yellow(message));
-	if (_progressActive) _redrawProgress();
+	printMessage(message, chalk.yellow);
 }
 
 export function displayInfo(message: string) {
-	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.gray(message));
-	if (_progressActive) _redrawProgress();
+	printMessage(message, chalk.gray);
 }
 
 export function displayBold(message: string) {
-	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.white.bold(message));
-	if (_progressActive) _redrawProgress();
-}
-
-export function displayConflict(message: string) {
-	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.red(`! conflict: ${message}`));
-	if (_progressActive) _redrawProgress();
+	printMessage(message, chalk.white.bold);
 }
 
 export function displayFailed(message: string) {
-	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.red(message));
-	if (_progressActive) _redrawProgress();
+	printMessage(message, chalk.red);
 }
 
 export function displaySucceeded(message: string) {
-	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.green(message));
-	if (_progressActive) _redrawProgress();
+	printMessage(message, chalk.green);
 }
 
 export function displayTotal(message: string) {
-	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.white(message));
-	if (_progressActive) _redrawProgress();
+	printMessage(message, chalk.white);
 }
 
 export function displayDebug(context: string, message: string) {
 	if (!_debugMode) return;
-	if (_progressActive) _eraseProgressLine();
-	console.log(chalk.gray(`[${context}] ${message}`));
-	if (_progressActive) _redrawProgress();
+	printMessage(`[${context}] ${message}`, chalk.gray);
 }

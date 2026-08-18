@@ -1,9 +1,9 @@
 import { glob } from "glob";
 import { stat } from "fs/promises";
-import { resolve, join } from "path";
-import type { BarkCommand, BatchProcessResult, BatchProgress, BatchSummary, FileMapping, RhinocodeClient } from "../types";
+import { basename, resolve, join } from "path";
+import type { BarkCommand, BatchProgress, BatchSummary, FileMapping, RhinocodeClient } from "../types";
 import { execute } from "./rhinocode";
-import { displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug, displayProgress, flushProgress, displayWarning } from "./logger";
+import { displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug, displayProgress, flushProgress } from "./logger";
 
 export async function collectFiles(
 	inputFolder: string,
@@ -42,15 +42,14 @@ export async function processBatch(
 	client: RhinocodeClient,
 	command: BarkCommand,
 	inputFiles: string[],
-	fileNames: string[],
 	instanceIds: string[],
 	projectRoot: string,
-): Promise<BatchProcessResult> {
+): Promise<BatchSummary> {
 	const batchStartTime = Date.now();
 
-	const mappings: FileMapping[] = inputFiles.map((inputPath, index) => ({
+	const mappings: FileMapping[] = inputFiles.map((inputPath) => ({
 		inputPath,
-		fileName: fileNames[index] || "unknown",
+		fileName: basename(inputPath).replace(/\.[^/.]+$/, ""),
 		status: "pending" as const,
 	}));
 
@@ -67,11 +66,10 @@ export async function processBatch(
 		total: inputFiles.length,
 		succeeded: stats.succeeded,
 		failed: stats.failed,
-		skipped: 0,
 		durationMs: totalElapsed,
 	};
 
-	return { mappings, summary };
+	return summary;
 }
 
 async function processBatchWorkQueue(
@@ -175,9 +173,6 @@ export function printBatchSummary(summary: BatchSummary): void {
 	displaySucceeded(`Succeeded: ${summary.succeeded}`);
 	if (summary.failed > 0) {
 		displayFailed(`Failed:   ${summary.failed}`);
-	}
-	if (summary.skipped > 0) {
-		displayWarning(`Skipped:  ${summary.skipped}`);
 	}
 	displayTotal(`Duration: ${elapsedStr}`);
 }

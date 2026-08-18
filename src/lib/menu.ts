@@ -1,14 +1,7 @@
 import { select } from "@inquirer/prompts";
 import type { BarkcodeConfig, MenuAction, MenuChoice } from "../types";
-import { processBatch, printBatchSummary, collectFiles } from "./batch";
-import { displayBold, displayInfo, displayWarning } from "./logger";
-
-class ExitPromptError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ExitPromptError";
-  }
-}
+import { collectFiles } from "./batch";
+import { displayInfo } from "./logger";
 
 export async function showCommandMenu(
   config: BarkcodeConfig,
@@ -38,16 +31,13 @@ export async function showCommandMenu(
     const command = config.commands[index];
 
     if (command) {
-      const inputPattern = command.inputPattern || "*.3dm";
-      const inputFolder = command.inputFolder || ".";
-
-      const files = await collectFiles(inputFolder, inputPattern, projectRoot);
+      const files = await collectFiles(command.inputFolder, command.inputPattern, projectRoot);
       return { type: "run", command, files };
     }
 
     return { type: "exit" };
   } catch (e) {
-    if (e instanceof ExitPromptError || (e as Error).name === "ExitPromptError") {
+    if ((e as Error).name === "ExitPromptError") {
       displayInfo("\nExiting Barkcode.");
       return { type: "exit" };
     }
