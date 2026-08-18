@@ -2,7 +2,7 @@ import { glob } from "glob";
 import { stat } from "fs/promises";
 import { resolve, join } from "path";
 import type { BatchSummary, FileMapping, BarkCommand } from "../types";
-import { execute } from "./rhinocode";
+import { execute, type RhinocodeClient } from "./rhinocode";
 import { displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug, displayProgress, flushProgress, displayWarning } from "./logger";
 
 export async function collectFiles(
@@ -39,6 +39,7 @@ export async function collectFiles(
 }
 
 export async function processBatch(
+	client: RhinocodeClient,
 	command: BarkCommand,
 	inputFiles: string[],
 	fileNames: string[],
@@ -53,19 +54,10 @@ export async function processBatch(
 		status: "pending" as const,
 	}));
 
-	let succeeded = 0;
-	let failed = 0;
-	let completedCount = 0;
-
-
 	displayDebug("processBatch", `valid instances: ${instanceIds.join(", ")}`);
 
 	const stats = { succeeded: 0, failed: 0, completedCount: 0 };
-	await processBatchWorkQueue(command, mappings, instanceIds, projectRoot, batchStartTime, stats);
-
-	succeeded = stats.succeeded;
-	failed = stats.failed;
-	completedCount = stats.completedCount;
+	await processBatchWorkQueue(client, command, mappings, instanceIds, projectRoot, batchStartTime, stats);
 
 	flushProgress();
 	displayDebug("processBatch", "all instances finished processing");
@@ -73,8 +65,8 @@ export async function processBatch(
 	const totalElapsed = Date.now() - batchStartTime;
 	const summary: BatchSummary = {
 		total: inputFiles.length,
-		succeeded,
-		failed,
+		succeeded: stats.succeeded,
+		failed: stats.failed,
 		skipped: 0,
 		durationMs: totalElapsed,
 	};
@@ -83,6 +75,7 @@ export async function processBatch(
 }
 
 async function processBatchWorkQueue(
+	client: RhinocodeClient,
 	command: BarkCommand,
 	mappings: FileMapping[],
 	instanceIds: string[],
@@ -117,6 +110,7 @@ async function processBatchWorkQueue(
 
 				try {
 					const result = await execute(
+						client,
 						mapping.inputPath,
 						mapping.fileName,
 						command,

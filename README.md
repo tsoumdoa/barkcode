@@ -8,7 +8,7 @@ BarkCode is an open-source CLI tool for batch-processing Rhino 3DM files. It spa
 
 - [bun](https://bun.sh) runtime
 - [npm](https://www.npmjs.com/) CLI
-- Rhino 8 with `rhinocode` in system PATH
+- Rhino 8. BarkCode uses `rhinocode` from PATH when available. On macOS it also checks Rhino 8's bundled binary.
 - macOS or Windows
 
 ### Setup
@@ -43,13 +43,16 @@ bun unlink
 # Run an interactive menu to select a batch command
 barkcode run
 
-# Spawn 12 instances (win only, and default spawn count is 8)
+# Spawn 12 instances on Windows. The Windows default is 8.
 barkcode run --spawn=12
+
+# macOS starts one Rhino instance automatically. Larger values are clamped to 1.
+barkcode run --spawn=1
 
 # Run a specific command by ID (from barkcode.json)
 barkcode run convert:skp
 
-# Execute a Rhino macro directly (automatically spawn Rhino on Win)
+# Execute a Rhino macro directly. Rhino starts automatically when needed.
 barkcode command "_Circle 0 5"
 ```
 
@@ -73,9 +76,25 @@ barkcode.json → Config Loaded → Rhino Instances Spawned → Files Collected
 
 ## Core Concepts
 
-### Rhino Instance Management
+### Rhino instance management
 
-Rhino instances are discovered via `rhinocode list --json`. Each instance has a `pipeId` used to target commands. On macOS, only one Rhino instance is allowed; on Windows, multiple instances can be spawned.
+Rhino instances are discovered with `rhinocode list --json`. Each instance has a `pipeId` used to target commands. BarkCode reuses healthy instances before starting more. It returns exactly the requested worker count after applying the platform limit, so extra sessions never receive batch work.
+
+On macOS, BarkCode starts Rhino with:
+
+```text
+/usr/bin/open /Applications/Rhino 8.app --args -nosplash
+```
+
+macOS allows one worker. Rhino exposes its scripting endpoint after launch, so BarkCode only needs to open the application and wait for it to become ready. The wait has a fixed deadline.
+
+On Windows, BarkCode starts each worker with:
+
+```text
+C:\Program Files\Rhino 8\System\Rhino.exe /nosplash /runscript="_StartScriptServer"
+```
+
+One session tracks active workers and the instances BarkCode started. Recovery replaces dead worker IDs through that same session. On Windows, BarkCode automatically closes direct child processes that it can prove it owns. On macOS, `/usr/bin/open` cannot provide reliable ownership, so Rhino remains open unless the user explicitly chooses to quit it after a direct command.
 
 ### rhinocode CLI
 
@@ -85,7 +104,7 @@ The `rhinocode` command-line tool (part of Rhino) provides:
 - `rhinocode command <cmd>` - Execute a Rhino command in all instances
 - `rhinocode --rhino <pipeId> command <cmd>` - Target a specific instance
 
-BarkCode assumes `rhinocode` is in the system PATH.
+BarkCode resolves `rhinocode` once for each session. It checks PATH first, then `/Applications/Rhino 8.app/Contents/Resources/bin/rhinocode` on macOS. Listing, direct commands, batch execution, and cleanup all use that resolved executable.
 
 ### File Processing Pipeline
 
@@ -95,7 +114,7 @@ BarkCode assumes `rhinocode` is in the system PATH.
    - `rhinocode --rhino <id> -_open <file>` - Open the file
    - `rhinocode --rhino <id> command <rhCommand>` - Execute the command (e.g., `_SaveAs`)
    - `pollForFile()` - Wait for the output file to appear
-4. **Close**: After batch completes, `_-Quit` is sent to all instances
+4. **Close**: Windows instances started as direct children are closed automatically. macOS Rhino remains open unless the user explicitly chooses to quit it after a direct command.
 
 ## Project Structure
 
@@ -104,7 +123,7 @@ src/
 ├── main.ts                    # Entry point (bin: barkcode)
 ├── types.ts                   # Shared TypeScript types
 ├── schema.ts                  # barkcode.json validation schema
-├── constants.ts              # Rhino path, timeouts, defaults
+├── constants.ts              # Timeouts and defaults
 ├── logo.ts                    # ASCII logo display
 ├── usage.ts                   # CLI usage help
 │
@@ -115,7 +134,8 @@ src/
 │   └── benchmark.ts           # `bark benchmark` - spawn performance testing
 │
 └── lib/
-    ├── rhino.ts               # Rhino process spawning and health checks
+    ├── rhino.ts               # Stateful Rhino session, recovery, and owned cleanup
+    ├── rhino-platform.ts      # Platform launch commands and rhinocode resolution
     ├── rhinocode.ts           # Execute commands, poll for file output
     ├── rhinocode-schemas.ts   # JSON schema for rhinocode list output
     ├── batch.ts               # Work queue, parallel processing, progress
@@ -205,11 +225,11 @@ Scaffolds a `barkcode.json` in the current directory with default commands.
 Launches the interactive menu:
 
 1. Checks Rhino 8 installation
-2. Checks `rhinocode` availability in PATH
-3. Spawns Rhino instances (Windows) or prompts to open manually (macOS)
+2. Resolves `rhinocode` from PATH or Rhino's bundled macOS binary
+3. Reuses healthy workers and starts missing Rhino instances on macOS or Windows
 4. Shows a numbered menu of configured commands
 5. User selects a command → files are collected → batch processes
-6. Summary printed → all Rhino instances closed
+6. Summary printed, then BarkCode closes owned Windows instances. Rhino remains open on macOS.
 
 **Options:**
 
@@ -222,146 +242,6 @@ Launches the interactive menu:
 #### `bark benchmark`
 
 Windows-only benchmark tool for testing spawn performance with different instance counts and delays.
-
-## Key Files Explained
-
-### src/lib/rhino.ts
-
-Manages the Rhino process lifecycle.
-
-```typescript
-createRhinoRunner(rhinoPath) → {
-  checkRhinoOrExit()     // Verify Rhino.exe exists (Windows)
-  checkRhinocodeOrExit() // Verify rhinocode is in PATH
-  spawnRhino(count, delay?) // Launch count instances with _StartScriptServer
-  getRunningProcesses()  // Return pipeIds from `rhinocode list --json`
-  waitForRhinoInstances() // Poll until expected count reached
-}
-```
-
-On macOS, Rhino only allows one instance and must be opened manually.
-
-### src/lib/rhinocode.ts
-
-Core execution via `rhinocode` CLI.
-
-```typescript
-execute(inputFile, fileName, command, projectRoot, instanceId?) → Promise<CommandResult>
-```
-
-1. Builds output path using `{{fileName}}` replacement
-2. Replaces `{{path}}` in `rhCommand` with quoted output path
-3. Spawns `rhinocode --rhino <id> -_open "<inputFile>"`
-4. On that process exit, spawns `rhinocode --rhino <id> command <replacedCommand>`
-5. Polls for output file existence (pollForFile)
-
-```typescript
-pollForFile(filePath, timeoutMs, intervalMs) → Promise<boolean>
-```
-
-Repeatedly checks if file exists until timeout.
-
-```typescript
-buildOutputPath(outputFolder, outputName, outputSuffix, fileName, projectRoot) → string
-```
-
-### src/lib/batch.ts
-
-Implements the parallel work queue.
-
-```typescript
-collectFiles(inputFolder, pattern, projectRoot) → string[]
-```
-
-Uses `glob` to find matching files, sorts by size (largest first).
-
-```typescript
-processBatch(command, inputFiles, fileNames, instanceIds, projectRoot) → { mappings, summary }
-```
-
-1. Maps files to track status (pending/processing/success/failed)
-2. `Promise.all()` across instanceIds - each instance runs a while-loop pulling files from `nextIndex++`
-3. Each file: execute() → update status → displayProgress()
-4. On completion: closeAll() (sends \_-Quit to all instances)
-5. Returns BatchSummary with counts and duration
-
-### src/lib/config.ts
-
-```typescript
-loadConfig(options?) → Promise<LoadedConfig>
-// Searches upward for barkcode.json, validates JSON against schema
-
-findConfig(startDir?, explicitPath?) → string | null
-// Walks up directory tree looking for barkcode.json
-
-getCommand(config, commandNameOrIndex) → BarkCommand
-// Lookup by id, name, or numeric index (1-based)
-```
-
-### src/lib/sanitize.ts
-
-Input validation using valibot custom validators:
-
-- `FileNameValidator` - Rejects paths separators, null bytes, illegal chars
-- `FolderPathValidator` - Rejects absolute paths, `..` traversal
-- `RhinoCommandValidator` - Rejects null bytes, newlines, quotes, backticks
-
-### src/lib/logger.ts
-
-Unified console output with progress bar support:
-
-```typescript
-displayProgress(current, total, fileName, status, elapsedMs);
-// Shows: [████████████░░░░] 5/10 50% | ▓ filename (1m 23s)
-// Status "processing" updates the bar; "success"/"failed" replaces it with ✓/✗
-
-displayDebug(context, message);
-// Only prints if setDebugMode(true) was called
-
-flushProgress();
-// Erases the progress bar line from terminal
-```
-
-### src/lib/menu.ts
-
-Uses `@inquirer/prompts` select for interactive command choice. On selection, calls `collectFiles()` and returns `MenuAction: { type: "run", command, files }` or `{ type: "exit" }`.
-
-### src/commands/run.ts
-
-Main entry point for `bark run`:
-
-1. Parse CLI options
-2. Create RhinoRunner, verify Rhino + rhinocode
-3. Load config
-4. ensureRhinoInstances (spawn or prompt)
-5. If `--command` flag: run it directly, exit
-6. Else: enter `showCommandMenu()` loop until exit
-
-### src/commands/run-helpers.ts
-
-```typescript
-loadConfigOrExit(options?) → LoadedConfig
-// Wraps loadConfig() with error display and exit
-
-ensureRhinoInstances(rhinoRunner, spawnCount, delay?) → { pipeIds, spawnElapsedMs }
-// Platform-aware: macOS warns about single instance; Windows spawns
-// Shows connected instance IDs
-
-executeCommandIfRequested(commandName, config, projectRoot, instances)
-// Used by --command flag to run non-interactively
-```
-
-### src/commands/benchmark.ts
-
-Uses `tinybench` to benchmark spawn performance:
-
-- Spawns N instances with M ms delay
-- Measures elapsed time
-- Results: ops/sec, avg/min/max latency per configuration
-
-### src/commands/init.ts
-
-Scaffolds barkcode.json with two default commands (SKP conversion, Rhino6 format).
 
 ## CLI Options Reference
 
@@ -377,13 +257,15 @@ Scaffolds barkcode.json with two default commands (SKP conversion, Rhino6 format
 
 ### macOS
 
-- Rhino only allows **one** instance
-- User must manually open Rhino and run `_StartScriptServer`
-- `waitForRhinoInstances()` polls until the single instance appears
+- Rhino is launched on demand with `/usr/bin/open`
+- Worker requests above one are clamped to one with a warning
+- BarkCode checks Rhino's bundled `rhinocode` when PATH lookup fails
+- Startup polling has a fixed deadline
+- Rhino remains open after batch and interactive runs because `/usr/bin/open` does not expose reliable process ownership
 
 ### Windows
 
-- Multiple Rhino instances can be spawned via `Bun.spawn()`
+- Multiple Rhino instances are started as direct child processes
 - `_StartScriptServer` is passed via `/runscript="_StartScriptServer"` flag
 - Default spawn count is 8, max recommended is 16
 

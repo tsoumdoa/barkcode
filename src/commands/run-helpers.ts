@@ -1,4 +1,3 @@
-import chalk from "chalk";
 import { basename, resolve } from "path";
 import { existsSync, mkdirSync } from "fs";
 import { confirm } from "@inquirer/prompts";
@@ -6,74 +5,52 @@ import { getCommand, loadConfig } from "../lib/config";
 import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
 import {
 	displaySuccess,
-	displayError,
 	displayWarning,
 	displayInfo,
 	displayBold,
 	displayDebug,
 } from "../lib/logger";
-import { createRhinoRunner } from "../lib/rhino";
+import type { RhinoSession } from "../lib/rhino";
+import type { RhinocodeClient } from "../lib/rhinocode";
 import { BarkcodeConfig } from "../types";
-import { platform } from "os";
 
 export async function loadConfigOrExit(options: { configPath?: string }) {
-	let loadedConfig;
 	try {
-		loadedConfig = await loadConfig({ configPath: options.configPath });
+		return await loadConfig({ configPath: options.configPath });
 	} catch (e) {
 		const err = e as Error;
-		displayError(err.message);
-		displayInfo("\nRun `bark init` to create a barkcode.json file.");
-		process.exit(1);
+		throw new Error(`${err.message}\nRun \`bark init\` to create a barkcode.json file.`, { cause: err });
 	}
-	return loadedConfig;
 }
 
 export async function ensureRhinoInstances(
-	rhinoRunner: ReturnType<typeof createRhinoRunner>,
+	session: RhinoSession,
 	spawnCount: number,
 	spawnDelay?: number,
 ) {
-	const p = platform();
-let spawnElapsedMs = 0;
-	if (p === "darwin" && spawnCount > 1) {
+	if (session.config.platform === "darwin" && spawnCount > 1) {
 		displayWarning(
 			"On Mac, Rhino only allows one instance. Using --spawn=1.\n",
 		);
-		spawnCount = 1;
 	}
 
-	let instances = await rhinoRunner.getRunningProcesses();
-
-	if (p === "darwin" && instances.length === 0) {
-		displayWarning(
-			`On Mac, please manually open ${spawnCount} Rhino instance(s) and run the _StartScriptServer command in each.\n`,
-		);
-		displayInfo("Waiting for Rhino instances to be ready...\n");
-		instances = await rhinoRunner.waitForRhinoInstances(spawnCount);
-	} else if (p === "win32") {
-		displayInfo("Launching Rhino 8...");
-		try {
-			const result = await rhinoRunner.spawnRhino(spawnCount, spawnDelay);
-			instances = result.pipeIds;
-			spawnElapsedMs = result.spawnElapsedMs;
-		} catch (e) {
-			displayError((e as Error).message);
-			process.exit(1);
-		}
-	}
-	instances.forEach((instance) => {
+	const result = await session.ensureInstances({
+		requestedCount: spawnCount,
+		spawnDelayMs: spawnDelay,
+	});
+	result.pipeIds.forEach((instance) => {
 		displaySuccess(`Connected to Rhino ${instance}`);
 	});
 
-	if (spawnElapsedMs > 0) {
-		displayInfo(`Spawned and connected to ${instances.length} instance(s) in ${(spawnElapsedMs / 1000).toFixed(1)}s`);
+	if (result.spawnElapsedMs > 0) {
+		displayInfo(`Started and connected to ${result.pipeIds.length} instance(s) in ${(result.spawnElapsedMs / 1000).toFixed(1)}s`);
 	}
 
-	return { pipeIds: instances, spawnElapsedMs };
+	return result;
 }
 
 export async function executeCommandIfRequested(
+	client: RhinocodeClient,
 	commandName: string,
 	config: BarkcodeConfig,
 	projectRoot: string,
@@ -98,8 +75,7 @@ export async function executeCommandIfRequested(
 	});
 
 	if (files.length === 0) {
-		displayWarning(`No files found matching ${inputPattern}`);
-		process.exit(1);
+		throw new Error(`No files found matching ${inputPattern}`);
 	}
 
 	displayInfo(`Found ${files.length} file(s)\n`);
@@ -107,6 +83,7 @@ export async function executeCommandIfRequested(
 	await ensureOutputFolder(command.outputFolder, projectRoot);
 
 	const { summary } = await processBatch(
+		client,
 		command,
 		files,
 		fileNames,
@@ -135,7 +112,6 @@ export async function ensureOutputFolder(
 		mkdirSync(fullPath, { recursive: true });
 		displaySuccess(`Created output folder: ${fullPath}`);
 	} else {
-		displayInfo("Aborted.");
-		process.exit(0);
+		throw new Error("Output folder creation was cancelled.");
 	}
 }
