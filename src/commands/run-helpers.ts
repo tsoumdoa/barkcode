@@ -1,7 +1,7 @@
-import { basename, resolve } from "path";
+import { join, resolve } from "path";
 import { existsSync, mkdirSync } from "fs";
 import { confirm } from "@inquirer/prompts";
-import { getCommand, loadConfig } from "../lib/config";
+import { getCommand } from "../lib/config";
 import { collectFiles, printBatchSummary, processBatch } from "../lib/batch";
 import {
 	displaySuccess,
@@ -10,16 +10,7 @@ import {
 	displayBold,
 	displayDebug,
 } from "../lib/logger";
-import type { BarkcodeConfig, RhinocodeClient, RhinoSession } from "../types";
-
-export async function loadConfigOrExit(options: { configPath?: string }) {
-	try {
-		return await loadConfig({ configPath: options.configPath });
-	} catch (e) {
-		const err = e as Error;
-		throw new Error(`${err.message}\nRun \`bark init\` to create a barkcode.json file.`, { cause: err });
-	}
-}
+import type { BarkCommand, BarkcodeConfig, RhinocodeClient, RhinoSession } from "../types";
 
 export async function ensureRhinoInstances(
 	session: RhinoSession,
@@ -55,40 +46,35 @@ export async function executeCommandIfRequested(
 	instances: string[],
 ) {
 	const command = getCommand(config, commandName);
-
-	displayBold(`Running: ${command.name}`);
-	displayDebug("executeCommandIfRequested", `command id: ${command.id}`);
-	displayDebug("executeCommandIfRequested", `rhCommand: ${command.rhCommand}`);
-
-	const inputPattern = command.inputPattern;
-	const inputFolder = command.inputFolder;
-
-	displayDebug("executeCommandIfRequested", `inputFolder: ${inputFolder}`);
-	displayDebug("executeCommandIfRequested", `inputPattern: ${inputPattern}`);
-
-	const files = await collectFiles(inputFolder, inputPattern, projectRoot);
-	const fileNames = files.map((file) => {
-		const fileName = basename(file);
-		return fileName.replace(/\.[^/.]+$/, "");
-	});
+	const files = await collectFiles(command.inputFolder, command.inputPattern, projectRoot);
 
 	if (files.length === 0) {
-		throw new Error(`No files found matching ${inputPattern}`);
+		throw new Error(`No files found matching ${command.inputPattern}`);
 	}
 
-	displayInfo(`Found ${files.length} file(s)\n`);
+	await executeBatch(client, command, files, instances, projectRoot);
+}
 
+export async function executeBatch(
+	client: RhinocodeClient,
+	command: BarkCommand,
+	files: string[],
+	instances: string[],
+	projectRoot: string,
+): Promise<void> {
+	displayBold(`Running: ${command.name}`);
+	displayInfo(`  Input: ${join(command.inputFolder, command.inputPattern)}`);
+	displayInfo(`  Found ${files.length} file(s)`);
+	displayDebug("executeBatch", `command id: ${command.id}`);
+	displayDebug("executeBatch", `rhCommand: ${command.rhCommand}`);
 	await ensureOutputFolder(command.outputFolder, projectRoot);
-
-	const { summary } = await processBatch(
+	const summary = await processBatch(
 		client,
 		command,
 		files,
-		fileNames,
 		instances,
 		projectRoot,
 	);
-
 	printBatchSummary(summary);
 }
 
