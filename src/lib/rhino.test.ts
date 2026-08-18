@@ -1,8 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import type { RhinoInstanceJson } from "../types";
-import { RhinoSession } from "./rhino";
+import {
+	createRhinoSession,
+	selectRhinoInstances,
+	type RhinoSessionDependencies,
+} from "./rhino";
 import { getRhinoPlatformConfig } from "./rhino-platform";
-import { RhinocodeClient } from "./rhinocode";
+import { createRhinocodeClient, type RhinocodeClient } from "./rhinocode";
 
 function status(pipeId: string, processId: number): RhinoInstanceJson {
 	return {
@@ -23,7 +27,7 @@ function clientWithLists(
 	commands: string[][] = [],
 ): RhinocodeClient {
 	let listIndex = 0;
-	return new RhinocodeClient("mock-rhinocode", async (args) => {
+	return createRhinocodeClient("mock-rhinocode", async (args) => {
 		if (args[0] === "list") {
 			const item = lists[Math.min(listIndex++, lists.length - 1)]!;
 			if (item instanceof Error) throw item;
@@ -34,7 +38,7 @@ function clientWithLists(
 	});
 }
 
-function dependencies(overrides: Record<string, unknown> = {}) {
+function dependencies(overrides: Partial<RhinoSessionDependencies> = {}) {
 	let time = 0;
 	return {
 		now: () => time,
@@ -49,14 +53,39 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 	};
 }
 
-describe("RhinoSession", () => {
+function createTestSession(
+	platform: NodeJS.Platform,
+	client: RhinocodeClient,
+	overrides: Partial<RhinoSessionDependencies> = {},
+) {
+	return createRhinoSession({
+		config: getRhinoPlatformConfig(platform),
+		client,
+		dependencies: dependencies(overrides),
+	});
+}
+
+describe("createRhinoSession", () => {
+	it("selects active workers first without mutating the input", () => {
+		const instances = [
+			status("new", 10),
+			status("active", 30),
+			status("second", 20),
+		];
+
+		const selected = selectRhinoInstances(instances, 2, new Set(["active"]));
+
+		expect(selected.map((instance) => instance.pipeId)).toEqual(["active", "new"]);
+		expect(instances.map((instance) => instance.pipeId)).toEqual(["new", "active", "second"]);
+	});
+
 	it("returns exactly the requested workers in stable process order", async () => {
 		const client = clientWithLists([[
 			status("third", 30),
 			status("first", 10),
 			status("second", 20),
 		]]);
-		const session = new RhinoSession(getRhinoPlatformConfig("win32"), client, dependencies());
+		const session = createTestSession("win32", client);
 
 		const result = await session.ensureInstances({ requestedCount: 2 });
 
@@ -68,13 +97,17 @@ describe("RhinoSession", () => {
 		const commands: string[][] = [];
 		const client = clientWithLists([[], [status("mac", 55)]], commands);
 		const config = getRhinoPlatformConfig("darwin");
-		const session = new RhinoSession(config, client, dependencies({
-			launch: async (command: string, args: string[]) => {
-				launches.push([command, args]);
-				return {};
-			},
-			listRhinoProcessIds: async () => new Set<number>(),
-		}));
+		const session = createRhinoSession({
+			config,
+			client,
+			dependencies: dependencies({
+				launch: async (command: string, args: string[]) => {
+					launches.push([command, args]);
+					return {};
+				},
+				listRhinoProcessIds: async () => new Set<number>(),
+			}),
+		});
 
 		const result = await session.ensureInstances({ requestedCount: 4 });
 
@@ -93,12 +126,12 @@ describe("RhinoSession", () => {
 			[status("existing", 10)],
 			[status("unrelated", 99), status("started", 101), status("existing", 10)],
 		], commands);
-		const session = new RhinoSession(getRhinoPlatformConfig("win32"), client, dependencies({
+		const session = createTestSession("win32", client, {
 			launch: async () => {
 				launchCount++;
 				return { pid: 101 };
 			},
-		}));
+		});
 
 		const result = await session.ensureInstances({ requestedCount: 2 });
 
@@ -112,10 +145,10 @@ describe("RhinoSession", () => {
 	it("does not claim macOS ownership when the pre-launch PID snapshot fails", async () => {
 		const commands: string[][] = [];
 		const client = clientWithLists([[], [status("users-rhino", 42)]], commands);
-		const session = new RhinoSession(getRhinoPlatformConfig("darwin"), client, dependencies({
+		const session = createTestSession("darwin", client, {
 			launch: async () => ({}),
 			listRhinoProcessIds: async () => undefined,
-		}));
+		});
 
 		const result = await session.ensureInstances({ requestedCount: 1 });
 		await session.cleanupOwned();
@@ -127,12 +160,12 @@ describe("RhinoSession", () => {
 	it("does not launch when initial discovery fails", async () => {
 		let launched = false;
 		const client = clientWithLists([new Error("ENOENT")]);
-		const session = new RhinoSession(getRhinoPlatformConfig("win32"), client, dependencies({
+		const session = createTestSession("win32", client, {
 			launch: async () => {
 				launched = true;
 				return { pid: 101 };
 			},
-		}));
+		});
 
 		await expect(session.ensureInstances({ requestedCount: 1 })).rejects.toMatchObject({ kind: "spawn" });
 		expect(launched).toBe(false);
@@ -141,12 +174,12 @@ describe("RhinoSession", () => {
 	it("retries transient discovery errors without launching a second wave", async () => {
 		let launchCount = 0;
 		const client = clientWithLists([[], new Error("temporary"), [status("ready", 101)]]);
-		const session = new RhinoSession(getRhinoPlatformConfig("win32"), client, dependencies({
+		const session = createTestSession("win32", client, {
 			launch: async () => {
 				launchCount++;
 				return { pid: 101 };
 			},
-		}));
+		});
 
 		const result = await session.ensureInstances({ requestedCount: 1 });
 
@@ -157,10 +190,10 @@ describe("RhinoSession", () => {
 
 	it("bounds the macOS readiness wait", async () => {
 		const client = clientWithLists([[]]);
-		const session = new RhinoSession(getRhinoPlatformConfig("darwin"), client, dependencies({
+		const session = createTestSession("darwin", client, {
 			listRhinoProcessIds: async () => new Set([42]),
 			maxWaitMs: 20,
-		}));
+		});
 
 		await expect(session.ensureInstances({ requestedCount: 1 })).rejects.toThrow(
 			"Rhino did not expose 1 ready instance(s) within 20ms.",
@@ -171,7 +204,7 @@ describe("RhinoSession", () => {
 		let listCount = 0;
 		let quitCount = 0;
 		const terminated: number[] = [];
-		const client = new RhinocodeClient("mock-rhinocode", async (args) => {
+		const client = createRhinocodeClient("mock-rhinocode", async (args) => {
 			if (args[0] === "list") {
 				const instances = listCount++ === 0 ? [] : [status("owned", 55)];
 				return { exitCode: 0, stdout: JSON.stringify(instances), stderr: "" };
@@ -179,10 +212,10 @@ describe("RhinoSession", () => {
 			quitCount++;
 			return { exitCode: quitCount === 1 ? 7 : 0, stdout: "", stderr: "" };
 		});
-		const session = new RhinoSession(getRhinoPlatformConfig("win32"), client, dependencies({
+		const session = createTestSession("win32", client, {
 			launch: async () => ({ pid: 55 }),
 			terminateProcess: async (pid: number) => { terminated.push(pid); },
-		}));
+		});
 
 		await session.ensureInstances({ requestedCount: 1 });
 		await session.cleanupOwned();
@@ -195,14 +228,14 @@ describe("RhinoSession", () => {
 		let launchCount = 0;
 		const terminated: number[] = [];
 		const client = clientWithLists([[]]);
-		const session = new RhinoSession(getRhinoPlatformConfig("win32"), client, dependencies({
+		const session = createTestSession("win32", client, {
 			launch: async () => {
 				if (launchCount++ === 0) return { pid: 101 };
 				throw new Error("launch failed");
 			},
 			terminateProcess: async (pid: number) => { terminated.push(pid); },
 			maxWaitMs: 20,
-		}));
+		});
 
 		await expect(session.ensureInstances({ requestedCount: 2 })).rejects.toThrow("Failed to launch Rhino");
 		await session.cleanupOwned();
@@ -218,9 +251,9 @@ describe("RhinoSession", () => {
 			[], [status("three", 103)],
 		], commands);
 		let nextPid = 101;
-		const session = new RhinoSession(getRhinoPlatformConfig("win32"), client, dependencies({
+		const session = createTestSession("win32", client, {
 			launch: async () => ({ pid: nextPid++ }),
-		}));
+		});
 
 		await session.ensureInstances({ requestedCount: 1 });
 		await session.ensureInstances({ requestedCount: 1 });

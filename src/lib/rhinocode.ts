@@ -28,45 +28,55 @@ export async function runRhinocodeProcess(
 	return { exitCode, stdout, stderr };
 }
 
-export class RhinocodeClient {
+export type RhinocodeClient = {
+	readonly executable: string;
 	readonly run: RhinocodeRun;
+	list: () => Promise<RhinoInstanceJson[]>;
+	checkAvailable: () => Promise<void>;
+	command: (pipeId: string, command: string) => Promise<number>;
+	open: (pipeId: string, inputFile: string) => Promise<number>;
+	quit: (pipeId: string) => Promise<number>;
+};
 
-	constructor(
-		public readonly executable: string,
-		run?: RhinocodeRun,
-	) {
-		this.run = run ?? ((args) => runRhinocodeProcess(executable, args));
-	}
+export function createRhinocodeClient(
+	executable: string,
+	run: RhinocodeRun = (args) => runRhinocodeProcess(executable, args),
+): RhinocodeClient {
+	const list = (): Promise<RhinoInstanceJson[]> => discoverRhinoInstances(run);
 
-	list(): Promise<RhinoInstanceJson[]> {
-		return discoverRhinoInstances(this.run);
-	}
-
-	async checkAvailable(): Promise<void> {
+	const checkAvailable = async (): Promise<void> => {
 		let result: RhinocodeProcessResult;
 		try {
-			result = await this.run(["--version"]);
+			result = await run(["--version"]);
 		} catch (cause) {
-			throw new Error(`Failed to start rhinocode at ${this.executable}.`, { cause });
+			throw new Error(`Failed to start rhinocode at ${executable}.`, { cause });
 		}
 		if (result.exitCode !== 0) {
 			throw new Error(`rhinocode --version exited with code ${result.exitCode}.`);
 		}
-	}
+	};
 
-	async command(pipeId: string, command: string): Promise<number> {
-		const result = await this.run(["--rhino", pipeId, "command", command]);
+	const command = async (pipeId: string, rhinoCommand: string): Promise<number> => {
+		const result = await run(["--rhino", pipeId, "command", rhinoCommand]);
 		return result.exitCode;
-	}
+	};
 
-	async open(pipeId: string, inputFile: string): Promise<number> {
-		const result = await this.run(["--rhino", pipeId, "command", "-_open", `"${inputFile}"`]);
+	const open = async (pipeId: string, inputFile: string): Promise<number> => {
+		const result = await run(["--rhino", pipeId, "command", "-_open", `"${inputFile}"`]);
 		return result.exitCode;
-	}
+	};
 
-	async quit(pipeId: string): Promise<number> {
-		return this.command(pipeId, "_-Quit");
-	}
+	const quit = (pipeId: string): Promise<number> => command(pipeId, "_-Quit");
+
+	return {
+		executable,
+		run,
+		list,
+		checkAvailable,
+		command,
+		open,
+		quit,
+	};
 }
 
 export function buildOutputPath(

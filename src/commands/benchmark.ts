@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { Bench, type Task } from "tinybench";
 import { createRhinoSession } from "../lib/rhino";
 import { getRhinoPlatformConfig, resolveRhinocodeExecutable } from "../lib/rhino-platform";
-import { RhinocodeClient } from "../lib/rhinocode";
+import { createRhinocodeClient } from "../lib/rhinocode";
 import { killRhinoInstances } from "../lib/kill-rhino";
 
 export type BenchmarkResult = {
@@ -86,7 +86,7 @@ export async function benchmark(options: {
 		: [10, 30, 50, 150].reverse();
 
 	const config = getRhinoPlatformConfig("win32");
-	const client = new RhinocodeClient(resolveRhinocodeExecutable(config));
+	const client = createRhinocodeClient(resolveRhinocodeExecutable(config));
 	await client.checkAvailable();
 
 	const ITERATIONS = 1;

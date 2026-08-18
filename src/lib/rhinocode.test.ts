@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { RhinocodeClient } from "./rhinocode";
+import { createRhinocodeClient } from "./rhinocode";
 
-describe("RhinocodeClient", () => {
+describe("createRhinocodeClient", () => {
 	it("routes list, open, command, and quit through one configured runner", async () => {
 		const calls: string[][] = [];
-		const client = new RhinocodeClient("/custom/rhinocode", async (args) => {
+		const client = createRhinocodeClient("/custom/rhinocode", async (args) => {
 			calls.push(args);
 			return {
 				exitCode: 0,
