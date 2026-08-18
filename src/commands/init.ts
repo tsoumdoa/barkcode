@@ -3,7 +3,7 @@ import { existsSync } from "fs";
 import { resolve } from "path";
 import { confirm } from "@inquirer/prompts";
 import { displayMessage, displayWarning, displayInfo } from "../lib/logger";
-import { BarkcodeConfig } from "../types";
+import type { BarkcodeConfig, InitOptions } from "../types";
 
 const DEFAULT_CONFIG: BarkcodeConfig = {
 	version: "1.0",
@@ -33,7 +33,7 @@ const DEFAULT_CONFIG: BarkcodeConfig = {
 	],
 };
 
-export async function init(options: { path?: string; force?: boolean } = {}) {
+export async function init(options: InitOptions = {}) {
 	const targetDir = options.path || process.cwd();
 	const configPath = resolve(targetDir, "barkcode.json");
 

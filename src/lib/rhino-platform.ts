@@ -1,16 +1,5 @@
 import { existsSync } from "fs";
-
-export type RhinoPlatform = "darwin" | "win32";
-
-export type RhinoPlatformConfig = {
-	platform: RhinoPlatform;
-	installationPath: string;
-	processName: string;
-	launchCommand: string;
-	launchArgs: string[];
-	rhinocodeFallbacks: string[];
-	maxInstances: number;
-};
+import type { RhinoPlatformConfig, RhinocodeExecutableOptions } from "../types";
 
 export class UnsupportedPlatformError extends Error {
 	constructor(platformName: string) {
@@ -74,10 +63,7 @@ export function assertRhinoInstalled(
 
 export function resolveRhinocodeExecutable(
 	config: RhinoPlatformConfig,
-	options: {
-		which?: (command: string) => string | null;
-		exists?: (path: string) => boolean;
-	} = {},
+	options: RhinocodeExecutableOptions = {},
 ): string {
 	const which = options.which ?? ((command: string) => Bun.which(command));
 	const exists = options.exists ?? existsSync;

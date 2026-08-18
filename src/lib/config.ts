@@ -3,8 +3,7 @@ import { existsSync } from "fs";
 import { resolve, dirname, sep } from "path";
 import type { BarkcodeConfig, LoadedConfig, ConfigLoadOptions } from "../types";
 import { validateConfig } from "../schema";
-
-const CONFIG_FILENAME = "barkcode.json";
+import { CONFIG_FILENAME } from "../constants";
 
 function getRoot(): string {
   if (sep === "/") {
@@ -71,7 +70,7 @@ export async function loadConfig(options: ConfigLoadOptions = {}): Promise<Loade
   }
 
   const validation = validateConfig(rawData);
-  if (!validation.success || !validation.data) {
+	if (validation.success === false) {
     throw new Error(`Config validation failed:\n${validation.error}`);
   }
 

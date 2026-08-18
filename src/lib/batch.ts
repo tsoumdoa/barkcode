@@ -1,8 +1,8 @@
 import { glob } from "glob";
 import { stat } from "fs/promises";
 import { resolve, join } from "path";
-import type { BatchSummary, FileMapping, BarkCommand } from "../types";
-import { execute, type RhinocodeClient } from "./rhinocode";
+import type { BarkCommand, BatchProcessResult, BatchProgress, BatchSummary, FileMapping, RhinocodeClient } from "../types";
+import { execute } from "./rhinocode";
 import { displayBold, displayTotal, displaySucceeded, displayFailed, displayDebug, displayProgress, flushProgress, displayWarning } from "./logger";
 
 export async function collectFiles(
@@ -45,7 +45,7 @@ export async function processBatch(
 	fileNames: string[],
 	instanceIds: string[],
 	projectRoot: string,
-): Promise<{ mappings: FileMapping[]; summary: BatchSummary }> {
+): Promise<BatchProcessResult> {
 	const batchStartTime = Date.now();
 
 	const mappings: FileMapping[] = inputFiles.map((inputPath, index) => ({
@@ -56,7 +56,7 @@ export async function processBatch(
 
 	displayDebug("processBatch", `valid instances: ${instanceIds.join(", ")}`);
 
-	const stats = { succeeded: 0, failed: 0, completedCount: 0 };
+	const stats: BatchProgress = { succeeded: 0, failed: 0, completedCount: 0 };
 	await processBatchWorkQueue(client, command, mappings, instanceIds, projectRoot, batchStartTime, stats);
 
 	flushProgress();
@@ -81,7 +81,7 @@ async function processBatchWorkQueue(
 	instanceIds: string[],
 	projectRoot: string,
 	batchStartTime: number,
-	stats: { succeeded: number; failed: number; completedCount: number },
+	stats: BatchProgress,
 ): Promise<void> {
 
 	displayDebug("processBatch", `starting work queue with ${instanceIds.length} workers...`);
