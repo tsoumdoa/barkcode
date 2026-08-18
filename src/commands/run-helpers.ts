@@ -10,9 +10,7 @@ import {
 	displayBold,
 	displayDebug,
 } from "../lib/logger";
-import type { RhinoSession } from "../lib/rhino";
-import type { RhinocodeClient } from "../lib/rhinocode";
-import { BarkcodeConfig } from "../types";
+import type { BarkcodeConfig, RhinocodeClient, RhinoSession } from "../types";
 
 export async function loadConfigOrExit(options: { configPath?: string }) {
 	try {

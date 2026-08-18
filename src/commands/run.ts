@@ -1,25 +1,11 @@
 import { basename, join } from "path";
-import { createRhinoSession, installSessionSignalCleanup, type RhinoSession } from "../lib/rhino";
+import { createRhinoSession, installSessionSignalCleanup } from "../lib/rhino";
 import { DEFAULT_SPAWN_COUNT, MAX_SPAWN_COUNT_WARNING } from "../constants";
 import { showCommandMenu } from "../lib/menu";
 import { processBatch, printBatchSummary } from "../lib/batch";
 import { displaySuccess, displayWarning, displayInfo, displayBold, displayError, setDebugMode } from "../lib/logger";
 import { loadConfigOrExit, ensureRhinoInstances, executeCommandIfRequested, ensureOutputFolder } from "./run-helpers";
-
-type RunOptions = {
-	spawn?: number;
-	spawnDelay?: number;
-	config?: string;
-	command?: string;
-	debug?: boolean;
-};
-
-type RunSessionOptions = {
-	spawnCount: number;
-	spawnDelay?: number;
-	configPath?: string;
-	commandName?: string;
-};
+import type { RhinoSession, RunOptions, RunSessionOptions } from "../types";
 
 export async function run(options: RunOptions = {}) {
 	const {

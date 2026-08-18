@@ -1,15 +1,6 @@
 import * as v from "valibot";
-import { RhinoInstanceListSchema, type RhinoInstanceJson } from "../types";
-
-export type RhinocodeProcessResult = {
-	exitCode: number;
-	stdout: string;
-	stderr: string;
-};
-
-export type RhinocodeRun = (args: string[]) => Promise<RhinocodeProcessResult>;
-
-export type RhinoDiscoveryErrorKind = "spawn" | "exit" | "json" | "schema";
+import { RhinoInstanceListSchema } from "../schema";
+import type { RhinoDiscoveryErrorKind, RhinocodeProcessResult, RhinocodeRun, RhinoInstanceJson } from "../types";
 
 export class RhinoDiscoveryError extends Error {
 	constructor(

@@ -8,11 +8,9 @@ import {
 	displayDebug,
 	setDebugMode,
 } from "../lib/logger";
+import type { CommandOptions } from "../types";
 
-export async function runCommand(options: {
-	command: string;
-	debug?: boolean;
-}) {
+export async function runCommand(options: CommandOptions) {
 	const { command, debug: isDebug = false } = options;
 	setDebugMode(isDebug);
 

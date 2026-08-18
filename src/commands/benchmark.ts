@@ -5,13 +5,7 @@ import { createRhinoSession } from "../lib/rhino";
 import { getRhinoPlatformConfig, resolveRhinocodeExecutable } from "../lib/rhino-platform";
 import { createRhinocodeClient } from "../lib/rhinocode";
 import { killRhinoInstances } from "../lib/kill-rhino";
-
-export type BenchmarkResult = {
-	instances: number;
-	delayMs: number;
-	spawnElapsedMs: number;
-	timestamp: string;
-};
+import type { BenchmarkOptions } from "../types";
 
 const COL_WIDTHS = { name: 24, ops: 14, avg: 14, min: 14, max: 14 };
 
@@ -68,10 +62,7 @@ function printTaskRow(task: Task): void {
 	console.log("  " + chalk.gray(line) + chalk.green(" ✓"));
 }
 
-export async function benchmark(options: {
-	instances?: string;
-	delay?: string;
-}) {
+export async function benchmark(options: BenchmarkOptions) {
 	const p = platform();
 	if (p !== "win32") {
 		console.log(chalk.yellow("  Benchmark only supported on Windows (win32). Exiting."));

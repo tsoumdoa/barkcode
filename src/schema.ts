@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { FileNameValidator, FolderPathValidator, RhinoCommandValidator } from "./lib/sanitize";
+import type { BarkcodeConfig, ConfigValidationResult } from "./types";
 
 export const BarkCommandSchema = v.object({
   id: v.string(),
@@ -19,17 +20,21 @@ export const BarkcodeConfigSchema = v.object({
   commands: v.pipe(v.array(BarkCommandSchema), v.minLength(1)),
 });
 
-export type BarkcodeConfig = v.InferOutput<typeof BarkcodeConfigSchema>;
+const ActiveDocSchema = v.object({ title: v.string(), location: v.string() });
+const RhinoStatusMetaSchema = v.object({ version: v.string() });
+const RhinoStatusSchema = v.object({
+	pipeId: v.string(), processId: v.number(), processName: v.string(), processVersion: v.string(),
+	processAge: v.number(), activeDoc: v.nullable(ActiveDocSchema), activeViewport: v.nullable(v.string()),
+	$meta: RhinoStatusMetaSchema, $type: v.literal("status"),
+});
 
-export function validateConfig(data: unknown): {
-  success: boolean;
-  data?: BarkcodeConfig;
-  error?: string;
-} {
+export const RhinoInstanceListSchema = v.array(RhinoStatusSchema);
+
+export function validateConfig(data: unknown): ConfigValidationResult {
   const result = v.safeParse(BarkcodeConfigSchema, data);
 
   if (result.success) {
-    return { success: true, data: result.output };
+    return { success: true, data: result.output as BarkcodeConfig };
   }
 
   const errors = result.issues.map((issue) => {

@@ -1,13 +1,9 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
-import type { BarkCommand, CommandResult, RhinoInstanceJson } from "../types";
+import type { BarkCommand, CommandResult, RhinocodeClient, RhinocodeProcessResult, RhinocodeRun, RhinoInstanceJson } from "../types";
 import { DEFAULT_TIMEOUT } from "../constants";
 import { displayDebug } from "./logger";
-import {
-	discoverRhinoInstances,
-	type RhinocodeProcessResult,
-	type RhinocodeRun,
-} from "./rhinocode-schemas";
+import { discoverRhinoInstances } from "./rhinocode-schemas";
 
 export async function runRhinocodeProcess(
 	executable: string,
@@ -27,16 +23,6 @@ export async function runRhinocodeProcess(
 	]);
 	return { exitCode, stdout, stderr };
 }
-
-export type RhinocodeClient = {
-	readonly executable: string;
-	readonly run: RhinocodeRun;
-	list: () => Promise<RhinoInstanceJson[]>;
-	checkAvailable: () => Promise<void>;
-	command: (pipeId: string, command: string) => Promise<number>;
-	open: (pipeId: string, inputFile: string) => Promise<number>;
-	quit: (pipeId: string) => Promise<number>;
-};
 
 export function createRhinocodeClient(
 	executable: string,

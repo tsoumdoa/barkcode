@@ -1,12 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import type { RhinoInstanceJson } from "../types";
+import type { RhinocodeClient, RhinoInstanceJson, RhinoSessionDependencies } from "../types";
 import {
 	createRhinoSession,
 	selectRhinoInstances,
-	type RhinoSessionDependencies,
 } from "./rhino";
 import { getRhinoPlatformConfig } from "./rhino-platform";
-import { createRhinocodeClient, type RhinocodeClient } from "./rhinocode";
+import { createRhinocodeClient } from "./rhinocode";
 
 function status(pipeId: string, processId: number): RhinoInstanceJson {
 	return {

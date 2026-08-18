@@ -1,7 +1,6 @@
 import { platform } from "os";
 import { delay } from "./rhino";
-import type { RhinocodeClient } from "./rhinocode";
-import { RhinoInstanceJson } from "../types";
+import type { RhinocodeClient, RhinoInstanceJson } from "../types";
 
 export async function killRhinoInstances(client: RhinocodeClient, instances: RhinoInstanceJson[]): Promise<void> {
 	const p = platform();

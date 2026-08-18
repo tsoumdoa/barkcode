@@ -1,38 +1,15 @@
 import chalk from "chalk";
 import { existsSync } from "fs";
-import type { RhinoInstanceJson } from "../types";
+import type { CreateRhinoSessionOptions, EnsureInstancesOptions, EnsureRhinoResult, RhinoInstanceJson, RhinoPlatformConfig, RhinoSession, RhinoSessionDependencies, RhinoSessionState } from "../types";
 import { displayDebug, displayWarning } from "./logger";
 import {
 	assertRhinoInstalled,
 	getRhinoPlatformConfig,
 	resolveRhinocodeExecutable,
-	type RhinoPlatformConfig,
 } from "./rhino-platform";
-import { createRhinocodeClient, type RhinocodeClient } from "./rhinocode";
+import { createRhinocodeClient } from "./rhinocode";
 import { DEFAULT_SPAWN_DELAY_MS, MAX_WAIT_MS, POLL_INTERVAL_MS } from "./spawn-constants";
 
-export type EnsureRhinoResult = {
-	pipeIds: string[];
-	launchedPipeIds: string[];
-	spawnElapsedMs: number;
-};
-
-type LaunchProcess = (
-	command: string,
-	args: string[],
-	config: RhinoPlatformConfig,
-) => Promise<{ pid?: number }>;
-
-export type RhinoSessionDependencies = {
-	now: () => number;
-	sleep: (ms: number) => Promise<void>;
-	exists: (path: string) => boolean;
-	launch: LaunchProcess;
-	listRhinoProcessIds: (config: RhinoPlatformConfig) => Promise<Set<number> | undefined>;
-	terminateProcess: (pid: number) => Promise<void>;
-	pollIntervalMs: number;
-	maxWaitMs: number;
-};
 
 const defaultDependencies: RhinoSessionDependencies = {
 	now: Date.now,
@@ -81,24 +58,6 @@ const defaultDependencies: RhinoSessionDependencies = {
 	},
 	pollIntervalMs: POLL_INTERVAL_MS,
 	maxWaitMs: MAX_WAIT_MS,
-};
-
-export type RhinoSession = {
-	readonly config: RhinoPlatformConfig;
-	readonly client: RhinocodeClient;
-	ensureInstances: (options: {
-		requestedCount: number;
-		spawnDelayMs?: number;
-	}) => Promise<EnsureRhinoResult>;
-	quitInstance: (pipeId: string) => Promise<void>;
-	cleanupOwned: () => Promise<void>;
-};
-
-type RhinoSessionState = {
-	readonly activePipeIds: ReadonlySet<string>;
-	readonly launchedPipeIds: ReadonlySet<string>;
-	readonly ownedPipes: ReadonlyMap<string, number>;
-	readonly ownedProcessIds: ReadonlySet<number>;
 };
 
 function createRhinoSessionState(): RhinoSessionState {
@@ -212,13 +171,7 @@ function forgetOwnedProcess(state: RhinoSessionState, processId: number): RhinoS
 	return { ...state, launchedPipeIds, ownedPipes, ownedProcessIds };
 }
 
-export function createRhinoSession(options: {
-	platform?: NodeJS.Platform;
-	config?: RhinoPlatformConfig;
-	rhinocodeExecutable?: string;
-	client?: RhinocodeClient;
-	dependencies?: Partial<RhinoSessionDependencies>;
-} = {}): RhinoSession {
+export function createRhinoSession(options: CreateRhinoSessionOptions = {}): RhinoSession {
 	const config = options.config ?? getRhinoPlatformConfig(options.platform);
 	const executable = options.rhinocodeExecutable ?? options.client?.executable ?? resolveRhinocodeExecutable(config);
 	const client = options.client ?? createRhinocodeClient(executable);
@@ -235,10 +188,7 @@ export function createRhinoSession(options: {
 		return selection.result;
 	};
 
-	const ensureInstances = async (options: {
-		requestedCount: number;
-		spawnDelayMs?: number;
-	}): Promise<EnsureRhinoResult> => {
+	const ensureInstances = async (options: EnsureInstancesOptions): Promise<EnsureRhinoResult> => {
 		const requestedCount = options.requestedCount;
 		if (!Number.isInteger(requestedCount) || requestedCount < 1) {
 			throw new RangeError("The Rhino instance count must be a positive integer.");

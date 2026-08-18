@@ -1,5 +1,5 @@
 import { select } from "@inquirer/prompts";
-import type { BarkcodeConfig, BarkCommand, MenuAction } from "../types";
+import type { BarkcodeConfig, MenuAction, MenuChoice } from "../types";
 import { processBatch, printBatchSummary, collectFiles } from "./batch";
 import { displayBold, displayInfo, displayWarning } from "./logger";
 
@@ -14,7 +14,7 @@ export async function showCommandMenu(
   config: BarkcodeConfig,
   projectRoot: string,
 ): Promise<MenuAction> {
-  const choices: Array<{ name: string; value: string; description?: string }> = [
+  const choices: MenuChoice[] = [
     ...config.commands.map((cmd, i) => ({
       name: cmd.id ? `${i + 1}. ${cmd.name} (${cmd.id})` : `${i + 1}. ${cmd.name}`,
       value: String(i),
